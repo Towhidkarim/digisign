@@ -1,0 +1,30 @@
+{
+  "projectName": "digisign",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "pnpm",
+  "includeExamples": false,
+  "tailwind": true,
+  "projectPreset": "default",
+  "addOnOptions": {
+    "drizzle": {
+      "database": "sqlite"
+    }
+  },
+  "git": false,
+  "install": false,
+  "intent": true,
+  "routerOnly": false,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": [
+    "biome",
+    "cloudflare",
+    "drizzle",
+    "form",
+    "shadcn",
+    "better-auth",
+    "tanstack-query",
+    "compiler"
+  ]
+}
