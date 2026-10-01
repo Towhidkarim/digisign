@@ -24,13 +24,36 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true
+			"recommended": true,
+			"style": {
+				"noRestrictedImports": {
+					"level": "error",
+					"options": {
+						"paths": {
+							"pdf-lib": "Import pdf-lib only from src/pdf or client components.",
+							"@pdf-lib/fontkit": "Import fontkit only from src/pdf or client components.",
+							"pdfjs-dist": "Import pdfjs-dist only from src/pdf or client components."
+						}
+					}
+				}
+			}
 		}
 	},
+	"overrides": [
+		{
+			"includes": ["src/pdf/**", "src/components/**", "src/features/**"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noRestrictedImports": "off"
+					}
+				}
+			}
+		}
+	],
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "double"
 		}
 	}
 }
-

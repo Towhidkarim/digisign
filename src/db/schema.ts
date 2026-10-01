@@ -1,12 +1,8 @@
-import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core'
-import { sql } from 'drizzle-orm'
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const todos = sqliteTable('todos', {
-  id: integer({ mode: 'number' }).primaryKey({
-    autoIncrement: true,
-  }),
-  title: text().notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp' }).default(
-    sql`(unixepoch())`,
-  ),
-})
+export const runtimeProbes = sqliteTable("runtime_probes", {
+	id: integer({ mode: "number" }).primaryKey({ autoIncrement: true }),
+	kind: text().notNull(),
+	payload: text().notNull(),
+	createdAt: integer("created_at", { mode: "number" }).notNull(),
+});

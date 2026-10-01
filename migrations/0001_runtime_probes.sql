@@ -1,0 +1,6 @@
+CREATE TABLE runtime_probes (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	kind TEXT NOT NULL,
+	payload TEXT NOT NULL,
+	created_at INTEGER NOT NULL
+);
