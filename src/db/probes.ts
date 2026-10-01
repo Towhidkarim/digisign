@@ -1,5 +1,5 @@
 import { getDb } from "#/db/index.ts";
-import { runtimeProbes } from "#/db/schema.ts";
+import { runtimeProbes } from "#/db/schema/index.ts";
 
 export async function insertProbe(kind: string, payload: string) {
 	const db = getDb();

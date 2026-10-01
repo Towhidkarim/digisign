@@ -13,7 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrepareRouteImport } from './routes/prepare'
 import { Route as SignRouteImport } from './routes/sign'
 import { Route as DevFoundationsRouteImport } from './routes/dev/foundations'
+import { Route as STokenRouteImport } from './routes/s/$token'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as FilesDocumentsIdSourceRouteImport } from './routes/files/documents/$id/source'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,9 +37,19 @@ const DevFoundationsRoute = DevFoundationsRouteImport.update({
   path: '/dev/foundations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const STokenRoute = STokenRouteImport.update({
+  id: '/s/$token',
+  path: '/s/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FilesDocumentsIdSourceRoute = FilesDocumentsIdSourceRouteImport.update({
+  id: '/files/documents/$id/source',
+  path: '/files/documents/$id/source',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -46,14 +58,18 @@ export interface FileRoutesByFullPath {
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
   '/dev/foundations': typeof DevFoundationsRoute
+  '/s/$token': typeof STokenRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
   '/dev/foundations': typeof DevFoundationsRoute
+  '/s/$token': typeof STokenRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,15 +77,38 @@ export interface FileRoutesById {
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
   '/dev/foundations': typeof DevFoundationsRoute
+  '/s/$token': typeof STokenRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/prepare' | '/sign' | '/dev/foundations' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/prepare'
+    | '/sign'
+    | '/dev/foundations'
+    | '/s/$token'
+    | '/api/auth/$'
+    | '/files/documents/$id/source'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/prepare' | '/sign' | '/dev/foundations' | '/api/auth/$'
+  to:
+    | '/'
+    | '/prepare'
+    | '/sign'
+    | '/dev/foundations'
+    | '/s/$token'
+    | '/api/auth/$'
+    | '/files/documents/$id/source'
   id:
-    '__root__' | '/' | '/prepare' | '/sign' | '/dev/foundations' | '/api/auth/$'
+    | '__root__'
+    | '/'
+    | '/prepare'
+    | '/sign'
+    | '/dev/foundations'
+    | '/s/$token'
+    | '/api/auth/$'
+    | '/files/documents/$id/source'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,7 +116,9 @@ export interface RootRouteChildren {
   PrepareRoute: typeof PrepareRoute
   SignRoute: typeof SignRoute
   DevFoundationsRoute: typeof DevFoundationsRoute
+  STokenRoute: typeof STokenRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  FilesDocumentsIdSourceRoute: typeof FilesDocumentsIdSourceRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -110,11 +151,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevFoundationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/s/$token': {
+      id: '/s/$token'
+      path: '/s/$token'
+      fullPath: '/s/$token'
+      preLoaderRoute: typeof STokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/files/documents/$id/source': {
+      id: '/files/documents/$id/source'
+      path: '/files/documents/$id/source'
+      fullPath: '/files/documents/$id/source'
+      preLoaderRoute: typeof FilesDocumentsIdSourceRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -125,7 +180,9 @@ const rootRouteChildren: RootRouteChildren = {
   PrepareRoute: PrepareRoute,
   SignRoute: SignRoute,
   DevFoundationsRoute: DevFoundationsRoute,
+  STokenRoute: STokenRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  FilesDocumentsIdSourceRoute: FilesDocumentsIdSourceRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

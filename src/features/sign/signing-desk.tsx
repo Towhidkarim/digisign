@@ -35,7 +35,7 @@ import {
 	loadScriptFonts,
 	SCRIPT_FACE,
 } from "#/pdf/fonts.ts";
-import { checkFractions, inkFractions } from "#/pdf/ink.ts";
+import { checkFractions, inkFractions, inkStrokeWidth } from "#/pdf/ink.ts";
 import "#/pdf/setup.ts";
 import { render } from "#/pdf/render.ts";
 
@@ -684,27 +684,27 @@ function InkGraphic({
 	viewH: number;
 }) {
 	if (value.signature?.kind === "drawn") {
+		const fieldW = Math.max(1, (field.w / 1_000_000) * viewW);
+		const fieldH = Math.max(1, (field.h / 1_000_000) * viewH);
 		const groups = inkFractions(
 			value.signature.box,
 			unpackStrokes(value.signature.strokes),
-			(field.w / 1_000_000) * viewW,
-			(field.h / 1_000_000) * viewH,
+			fieldW,
+			fieldH,
 		);
+		const stroke = inkStrokeWidth(value.signature.box, fieldW, fieldH);
 		return (
-			<svg
-				viewBox="0 0 1 1"
-				preserveAspectRatio="none"
-				className="h-full w-full"
-				aria-hidden
-			>
+			<svg viewBox={`0 0 ${fieldW} ${fieldH}`} className="h-full w-full" aria-hidden>
 				<title>Signature</title>
 				{groups.map((group) => (
 					<polyline
 						key={group.map((point) => `${point.x},${point.y}`).join(" ")}
-						points={group.map((point) => `${point.x},${point.y}`).join(" ")}
+						points={group
+							.map((point) => `${point.x * fieldW},${point.y * fieldH}`)
+							.join(" ")}
 						fill="none"
 						stroke="#12344A"
-						strokeWidth="0.03"
+						strokeWidth={stroke}
 						strokeLinecap="round"
 						strokeLinejoin="round"
 					/>

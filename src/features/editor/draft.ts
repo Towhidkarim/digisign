@@ -7,16 +7,24 @@ import {
 	saveLayoutInputSchema,
 	uploadInitSchema,
 } from "#/core/contracts/index.ts";
+import { sha256Hex } from "#/core/hash.ts";
 import { ulid } from "#/core/ulid.ts";
 import { type EditorSigner, SIGNER_COLORS } from "#/features/editor/reducer.ts";
-import {
-	declineSignature as declineStored,
-	openSigningContext,
-	resetSigning,
-	type SigningContext,
-	submitSignature as submitStored,
-} from "#/features/sign/session.ts";
+import type { SigningContext } from "#/features/sign/session.ts";
 import { readUpload } from "#/pdf/load.ts";
+import {
+	createDraftFn,
+	getDraftFn,
+	initUploadFn,
+	publishFn,
+	reissueInviteFn,
+	savePreparationFn,
+} from "#/server/documents.ts";
+import {
+	declineSignatureFn,
+	getSigningContextFn,
+	submitSignatureFn,
+} from "#/server/signing.ts";
 
 const STORAGE_KEY = "digisign.prepare.v1";
 
@@ -48,6 +56,7 @@ export function defaultSigner(): EditorSigner {
 	return {
 		id: ulid(),
 		name: "Signer 1",
+		email: "",
 		color: SIGNER_COLORS[0],
 	};
 }
@@ -73,9 +82,11 @@ export function hydrateDraft(): Draft {
 				typeof parsed.fileName === "string" ? parsed.fileName : "Document",
 			bytes: cachedBase64 ? base64ToBytes(cachedBase64) : null,
 			upload: upload.data,
-			signers: (signers.length > 0 ? signers : [defaultSigner()]).map(
-				(signer) => ({ ...signer, color: currentSignerColor(signer.color) }),
-			),
+			signers: (signers.length > 0 ? signers : [defaultSigner()]).map((signer) => ({
+				...signer,
+				email: signer.email ?? "",
+				color: currentSignerColor(signer.color),
+			})),
 			layout: layout.data,
 		};
 	} catch {
@@ -89,74 +100,141 @@ export async function initUpload(file: {
 	bytes: Uint8Array;
 }): Promise<UploadInit> {
 	const upload = await readUpload(file.bytes);
-	cachedBase64 = null;
+	const title = (file.name || "Document").replace(/\.pdf$/i, "") || "Document";
+	const created = await createDraftFn({
+		data: { id: upload.documentId, title },
+	});
+	if ("error" in created) throw new Error(created.error);
+	const recorded = await initUploadFn({ data: upload });
+	if ("error" in recorded) throw new Error(recorded.error);
+	const copy = new ArrayBuffer(file.bytes.byteLength);
+	new Uint8Array(copy).set(file.bytes);
+	const response = await fetch(`/files/documents/${upload.documentId}/source`, {
+		method: "PUT",
+		headers: { "content-type": "application/pdf" },
+		body: new Blob([copy], { type: "application/pdf" }),
+	});
+	if (!response.ok) {
+		const payload = (await response.json().catch(() => null)) as {
+			error?: string;
+		} | null;
+		throw new Error(payload?.error ?? "The PDF could not be stored.");
+	}
 	draft = {
-		fileName: file.name || "Document",
+		fileName: title,
 		bytes: file.bytes,
 		upload,
-		signers: draft.signers.length > 0 ? draft.signers : [defaultSigner()],
+		signers: (draft.signers.length > 0 ? draft.signers : [defaultSigner()]).map(
+			(signer) => ({ ...signer, email: signer.email ?? "" }),
+		),
 		layout: {
 			documentId: upload.documentId,
 			layoutVersion: 0,
 			fields: [],
 		},
 	};
-	persist();
-	resetSigning(upload.documentId);
 	return upload;
+}
+
+export async function savePreparation(input: {
+	documentId: string;
+	layoutVersion: number;
+	signers: readonly EditorSigner[];
+	fields: SaveLayoutInput["fields"];
+}): Promise<{ layoutVersion: number } | { error: string }> {
+	const result = await savePreparationFn({
+		data: {
+			documentId: input.documentId,
+			layoutVersion: input.layoutVersion,
+			signers: input.signers.map((signer) => ({
+				id: signer.id,
+				name: signer.name,
+				email: signer.email,
+			})),
+			fields: input.fields.map((field) => ({ ...field })),
+		},
+	});
+	if ("error" in result) return result;
+	if (draft.layout && draft.layout.documentId === input.documentId) {
+		draft = {
+			...draft,
+			layout: { ...draft.layout, layoutVersion: result.layoutVersion },
+			signers: input.signers.map((signer) => ({ ...signer })),
+		};
+	}
+	return result;
+}
+
+export async function loadServerDraft(documentId: string) {
+	return getDraftFn({ data: { documentId } });
+}
+
+export async function publishDocument(
+	documentId: string,
+): Promise<{ documentId: string; status: "in_progress" } | { error: string }> {
+	return publishFn({ data: { documentId } });
+}
+
+export async function reissueInvite(
+	signerId: string,
+): Promise<{ ok: true } | { error: string }> {
+	return reissueInviteFn({ data: { signerId } });
 }
 
 export async function getSigningContext(): Promise<
 	SigningContext | { error: string }
 > {
-	hydrateDraft();
-	if (!draft.bytes || !draft.upload || !draft.layout) {
-		return { error: "Choose a PDF on the prepare desk first." };
+	const result = await getSigningContextFn();
+	if ("error" in result) return result;
+	const response = await fetch(`/files/documents/${result.upload.documentId}/source`);
+	if (!response.ok) return { error: "The PDF could not be loaded." };
+	const bytes = new Uint8Array(await response.arrayBuffer());
+	const digest = await sha256Hex(bytes);
+	if (digest !== result.upload.sha256) {
+		return { error: "This file no longer matches the document that was prepared." };
 	}
-	return openSigningContext({
-		fileName: draft.fileName,
-		bytes: draft.bytes,
-		upload: draft.upload,
-		signers: draft.signers,
-		layout: draft.layout,
-	});
+	const signers = result.signers.map((signer, index) => ({
+		...signer,
+		color: SIGNER_COLORS[index % SIGNER_COLORS.length] ?? SIGNER_COLORS[0],
+	}));
+	draft = {
+		fileName: result.fileName,
+		bytes,
+		upload: result.upload,
+		signers,
+		layout: result.layout,
+	};
+	const signer = signers[result.signerIndex] ?? signers[0];
+	if (!signer) return { error: "This document has no signer." };
+	return {
+		status: result.status,
+		declineReason: result.declineReason,
+		signer,
+		signerIndex: result.signerIndex,
+		signerCount: result.signerCount,
+		fields: result.fields,
+		records: result.records,
+		stateHash: result.stateHash,
+		upload: result.upload,
+		layout: result.layout,
+		fileName: result.fileName,
+	};
 }
 
 export async function submitSignature(
 	body: SubmitSignatureInput,
 ): Promise<SigningContext | { error: string }> {
-	hydrateDraft();
-	if (!draft.upload || !draft.layout) {
-		return { error: "Choose a PDF on the prepare desk first." };
-	}
-	return submitStored(
-		{
-			fileName: draft.fileName,
-			upload: draft.upload,
-			signers: draft.signers,
-			layout: draft.layout,
-			geometry: draft.upload.geometry,
-		},
-		body,
-	);
+	const result = await submitSignatureFn({ data: body });
+	if ("error" in result) return result;
+	return getSigningContext();
 }
 
 export async function declineSignature(
 	reason: string,
 ): Promise<SigningContext | { error: string }> {
-	hydrateDraft();
-	if (!draft.upload || !draft.layout) {
-		return { error: "Choose a PDF on the prepare desk first." };
-	}
-	return declineStored(
-		{
-			fileName: draft.fileName,
-			upload: draft.upload,
-			signers: draft.signers,
-			layout: draft.layout,
-		},
-		reason,
-	);
+	const result = await declineSignatureFn({ data: { reason } });
+	if ("error" in result) return result;
+	return getSigningContext();
 }
 
 export function saveSigners(signers: readonly EditorSigner[]): void {
@@ -200,7 +278,8 @@ function isSigner(value: unknown): value is EditorSigner {
 	return (
 		typeof signer.id === "string" &&
 		typeof signer.name === "string" &&
-		typeof signer.color === "string"
+		typeof signer.color === "string" &&
+		(signer.email === undefined || typeof signer.email === "string")
 	);
 }
 

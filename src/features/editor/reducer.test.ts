@@ -31,7 +31,7 @@ function desk(pages = 1): EditorState {
 	return createEditorState({
 		documentId: id(1),
 		geometry: Array.from({ length: pages }, () => ({ ...letter })),
-		signers: [{ id: id(2), name: "Ava", color: "#C4622D" }],
+		signers: [{ id: id(2), name: "Ava", email: "ava@example.com", color: "#C4622D" }],
 	});
 }
 

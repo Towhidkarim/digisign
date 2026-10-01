@@ -3,6 +3,18 @@ import type { Stroke } from "#/core/strokes-codec.ts";
 
 export type Fraction = { x: number; y: number };
 
+/** Pen weight as a share of the draw pad's height. */
+const CAPTURE_PEN_FRACTION = 5.5 / 170;
+
+export function inkStrokeWidth(
+	box: { w: number; h: number },
+	fieldW: number,
+	fieldH: number,
+): number {
+	const fit = containFit(box.w, box.h, fieldW, fieldH);
+	return CAPTURE_PEN_FRACTION * fit.h;
+}
+
 export function inkFractions(
 	box: { w: number; h: number },
 	strokes: readonly Stroke[],

@@ -11,7 +11,7 @@ export const listProbes = createServerFn({ method: "GET" }).handler(
 	async () => {
 		const { desc } = await import("drizzle-orm");
 		const { getDb } = await import("#/db/index.ts");
-		const { runtimeProbes } = await import("#/db/schema.ts");
+		const { runtimeProbes } = await import("#/db/schema/index.ts");
 		const rows = await getDb()
 			.select()
 			.from(runtimeProbes)
@@ -33,8 +33,8 @@ export const saveFile = createServerFn({ method: "POST" })
 	.validator(noteSchema)
 	.handler(async ({ data }) => {
 		const { env } = await import("cloudflare:workers");
-		await env.DOCS.put(fileKey, data.note);
-		const stored = await env.DOCS.get(fileKey);
+		await env.STORAGE.put(fileKey, data.note);
+		const stored = await env.STORAGE.get(fileKey);
 		if (!stored) {
 			throw new Error(
 				"The file was saved, but reading it back failed. Try again.",

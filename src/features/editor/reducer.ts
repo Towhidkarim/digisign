@@ -51,6 +51,7 @@ const DEFAULT_SIZE_PT: Record<FieldKind, { w: number; h: number }> = {
 export type EditorSigner = {
 	id: string;
 	name: string;
+	email: string;
 	color: string;
 };
 
@@ -100,8 +101,10 @@ export type EditorAction =
 	| { type: "select-signer"; id: string }
 	| { type: "add-signer"; signer: EditorSigner }
 	| { type: "rename-signer"; id: string; name: string }
+	| { type: "set-signer-email"; id: string; email: string }
 	| { type: "reorder-signers"; from: number; to: number; record?: boolean }
 	| { type: "remove-signer"; id: string }
+	| { type: "sync-version"; layoutVersion: number }
 	| { type: "undo" }
 	| { type: "redo" };
 
@@ -185,6 +188,13 @@ export function editorReducer(
 					signer.id === action.id ? { ...signer, name: action.name } : signer,
 				),
 			};
+		case "set-signer-email":
+			return {
+				...state,
+				signers: state.signers.map((signer) =>
+					signer.id === action.id ? { ...signer, email: action.email } : signer,
+				),
+			};
 		case "reorder-signers":
 			return reorderSigners(
 				state,
@@ -194,6 +204,10 @@ export function editorReducer(
 			);
 		case "remove-signer":
 			return removeSigner(state, action.id);
+		case "sync-version":
+			return action.layoutVersion === state.layoutVersion
+				? state
+				: { ...state, layoutVersion: action.layoutVersion };
 		case "undo":
 			return undo(state);
 		case "redo":

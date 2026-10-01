@@ -1,6 +1,7 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
 	Suspense,
+	useCallback,
 	useEffect,
 	useMemo,
 	useReducer,
@@ -16,7 +17,11 @@ import {
 	getDraft,
 	hydrateDraft,
 	initUpload,
+	loadServerDraft,
+	publishDocument,
+	reissueInvite,
 	saveLayout,
+	savePreparation,
 	saveSigners,
 } from "#/features/editor/draft.ts";
 import { PageStage, type Zoom } from "#/features/editor/page-stage.tsx";
@@ -51,11 +56,7 @@ export function PrepareDesk() {
 			await initUpload({ name: file.name, bytes });
 			setSession({ ...getDraft() });
 		} catch (caught) {
-			setError(
-				caught instanceof PdfLoadError
-					? caught.message
-					: pdfMessages.unreadable,
-			);
+			setError(caught instanceof Error ? caught.message : pdfMessages.unreadable);
 		} finally {
 			setPhase("idle");
 		}
@@ -100,7 +101,7 @@ export function PrepareDesk() {
 						Choose a PDF
 					</h1>
 					<p className="mt-3 max-w-sm text-muted-foreground">
-						The file stays on this device.
+						The preview stays in this tab. The file is stored for the signers.
 					</p>
 					{session.upload && !session.bytes ? (
 						<p className="mt-4 max-w-sm text-muted-foreground">
@@ -159,24 +160,90 @@ function Editor({
 						: 0,
 			}),
 	);
-	const navigate = useNavigate();
+	const [sent, setSent] = useState(false);
+	const [sending, setSending] = useState(false);
+	const [invited, setInvited] = useState<
+		{ id: string; name: string; email: string }[]
+	>([]);
 	const [zoom, setZoom] = useState<Zoom>({ mode: "fit-width" });
 	const [pageNumber, setPageNumber] = useState(1);
 	const [drawnError, setDrawnError] = useState("");
+	const [notice, setNotice] = useState("");
 	const file = useMemo(
 		() => new Blob([bytes.slice()], { type: "application/pdf" }),
 		[bytes],
 	);
 	const stateRef = useRef(state);
 	stateRef.current = state;
+	const versionRef = useRef(state.layoutVersion);
+	const saveChain = useRef(Promise.resolve());
+	const sendingRef = useRef(false);
+
+	const enqueueSave = useCallback(
+		(snapshot: {
+			documentId: string;
+			signers: typeof state.signers;
+			fields: typeof state.fields;
+		}) => {
+			const noteVersion = (layoutVersion: number) => {
+				versionRef.current = layoutVersion;
+				if (layoutVersion !== stateRef.current.layoutVersion) {
+					dispatch({ type: "sync-version", layoutVersion });
+				}
+			};
+			const run = saveChain.current.then(async () => {
+				const saved = await savePreparation({
+					documentId: snapshot.documentId,
+					layoutVersion: versionRef.current,
+					signers: snapshot.signers,
+					fields: snapshot.fields,
+				});
+				if (!("error" in saved)) {
+					noteVersion(saved.layoutVersion);
+					return saved;
+				}
+				if (!saved.error.includes("updated")) return saved;
+				const fresh = await loadServerDraft(snapshot.documentId);
+				if ("error" in fresh) return saved;
+				const retry = await savePreparation({
+					documentId: snapshot.documentId,
+					layoutVersion: fresh.layoutVersion,
+					signers: snapshot.signers,
+					fields: snapshot.fields,
+				});
+				if (!("error" in retry)) noteVersion(retry.layoutVersion);
+				return retry;
+			});
+			saveChain.current = run.then(
+				() => undefined,
+				() => undefined,
+			);
+			return run;
+		},
+		[],
+	);
 
 	useEffect(() => {
+		const snapshot = {
+			documentId: state.documentId,
+			signers: state.signers,
+			fields: state.fields,
+		};
+		let cancelled = false;
 		const id = window.setTimeout(() => {
-			saveSigners(state.signers);
-			saveLayout(toSaveLayout(state));
+			if (sendingRef.current) return;
+			void enqueueSave(snapshot).then((result) => {
+				if (cancelled || sendingRef.current) return;
+				if ("error" in result && !result.error.includes("no longer be edited")) {
+					setNotice(result.error);
+				}
+			});
 		}, 300);
-		return () => window.clearTimeout(id);
-	}, [state]);
+		return () => {
+			cancelled = true;
+			window.clearTimeout(id);
+		};
+	}, [enqueueSave, state.documentId, state.fields, state.signers]);
 
 	useEffect(() => {
 		function flush() {
@@ -262,14 +329,54 @@ function Editor({
 				</button>
 				<button
 					type="button"
-					className="rounded-md bg-[var(--harbor)] px-3 py-1.5 text-sm text-white"
+					className="rounded-md bg-[var(--harbor)] px-3 py-1.5 text-sm text-white disabled:opacity-40"
+					disabled={sent || sending}
 					onClick={() => {
-						saveSigners(state.signers);
-						saveLayout(toSaveLayout(state));
-						void navigate({ to: "/sign" });
+						void (async () => {
+							sendingRef.current = true;
+							setSending(true);
+							setNotice("");
+							const current = stateRef.current;
+							saveSigners(current.signers);
+							saveLayout(toSaveLayout(current));
+							const saved = await enqueueSave({
+								documentId: current.documentId,
+								signers: current.signers,
+								fields: current.fields,
+							});
+							if ("error" in saved) {
+								sendingRef.current = false;
+								setSending(false);
+								setNotice(saved.error);
+								return;
+							}
+							const published = await publishDocument(current.documentId);
+							if ("error" in published) {
+								sendingRef.current = false;
+								setSending(false);
+								setNotice(published.error);
+								return;
+							}
+							const fresh = await loadServerDraft(current.documentId);
+							if (!("error" in fresh)) {
+								setInvited(
+									fresh.signers
+										.filter((signer) => signer.status === "invited")
+										.map((signer) => ({
+											id: signer.id,
+											name: signer.name,
+											email: signer.email,
+										})),
+								);
+							}
+							setNotice(
+								"Sent for signature. The invite link is printed in the server console.",
+							);
+							setSent(true);
+						})();
 					}}
 				>
-					Start signing
+					Send for signature
 				</button>
 				<button
 					type="button"
@@ -283,6 +390,44 @@ function Editor({
 				<p className="border-b border-border px-3 py-2 text-sm text-destructive">
 					{viewError || drawnError}
 				</p>
+			) : null}
+			{notice ? (
+				<p className="border-b border-border px-3 py-2 text-sm text-muted-foreground">
+					{notice}
+				</p>
+			) : null}
+			{sent ? (
+				<section className="border-b border-border px-3 py-3">
+					<h2 className="text-sm font-medium">Invite links</h2>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Send link again prints a new link in the server console. This page
+						does not keep the link.
+					</p>
+					<ul className="mt-3 flex flex-col gap-2">
+						{invited.map((signer) => (
+							<li key={signer.id} className="flex items-center gap-3 text-sm">
+								<span className="min-w-0 flex-1 truncate">
+									{signer.name || "Signer"} · {signer.email || "No email"}
+								</span>
+								<button
+									type="button"
+									className="rounded-md px-2 py-1 text-[var(--harbor)] hover:underline"
+									onClick={() => {
+										void reissueInvite(signer.id).then((result) => {
+											setNotice(
+												"error" in result
+													? result.error
+													: "A new link was printed in the server console.",
+											);
+										});
+									}}
+								>
+									Send link again
+								</button>
+							</li>
+						))}
+					</ul>
+				</section>
 			) : null}
 			<DeskDrag
 				signers={state.signers}

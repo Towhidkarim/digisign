@@ -27,7 +27,12 @@ import type { LocalManifest } from "#/features/sign/manifest.ts";
 import { envelopeJson } from "#/features/sign/manifest.ts";
 import { formatSignedTime } from "#/features/sign/values.ts";
 import type { ScriptFontBytes } from "#/pdf/fonts.ts";
-import { checkFractions, type Fraction, inkFractions } from "#/pdf/ink.ts";
+import {
+	checkFractions,
+	type Fraction,
+	inkFractions,
+	inkStrokeWidth,
+} from "#/pdf/ink.ts";
 
 const INK = rgb(18 / 255, 52 / 255, 74 / 255);
 const QUIET = rgb(70 / 255, 110 / 255, 130 / 255);
@@ -120,7 +125,8 @@ function drawField(
 		const fieldW = (field.w / 1_000_000) * viewW;
 		const fieldH = (field.h / 1_000_000) * viewH;
 		const groups = inkFractions(value.signature.box, strokes, fieldW, fieldH);
-		for (const group of groups) drawFractions(page, geometry, field, group);
+		const stroke = inkStrokeWidth(value.signature.box, fieldW, fieldH);
+		for (const group of groups) drawFractions(page, geometry, field, group, stroke);
 		return;
 	}
 	if (value.signature?.kind === "typed") {

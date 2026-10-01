@@ -1,17 +1,9 @@
-/**
- * For more details on how to configure Wrangler, refer to:
- * https://developers.cloudflare.com/workers/wrangler/configuration/
- */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "digisign",
-	"compatibility_date": "2026-10-01",
+	"compatibility_date": "2026-08-22",
 	"compatibility_flags": ["nodejs_compat"],
 	"main": "src/server-entry.ts",
-	"observability": {
-		"enabled": true
-	},
-	"upload_source_maps": true,
 	"d1_databases": [
 		{
 			"binding": "DB",

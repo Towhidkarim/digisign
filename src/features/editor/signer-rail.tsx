@@ -74,9 +74,10 @@ export function SignerRail({
 						onClick={() =>
 							dispatch({
 								type: "add-signer",
-								signer: {
+									signer: {
 									id: ulid(),
 									name: `Signer ${signers.length + 1}`,
+									email: "",
 									color: nextSignerColor(signers.map((signer) => signer.color)),
 								},
 							})
@@ -199,20 +200,38 @@ function SignerRow({
 				style={{ background: signer.color }}
 				onClick={() => dispatch({ type: "select-signer", id: signer.id })}
 			/>
-			<input
-				aria-label={`Name for signer ${index + 1}`}
-				value={signer.name}
-				maxLength={80}
-				className="h-8 min-w-0 flex-1 rounded-md bg-transparent px-1 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-				onChange={(event) =>
-					dispatch({
-						type: "rename-signer",
-						id: signer.id,
-						name: event.target.value,
-					})
-				}
-				onClick={() => dispatch({ type: "select-signer", id: signer.id })}
-			/>
+			<div className="flex min-w-0 flex-1 flex-col">
+				<input
+					aria-label={`Name for signer ${index + 1}`}
+					value={signer.name}
+					maxLength={80}
+					className="h-8 min-w-0 rounded-md bg-transparent px-1 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					onChange={(event) =>
+						dispatch({
+							type: "rename-signer",
+							id: signer.id,
+							name: event.target.value,
+						})
+					}
+					onClick={() => dispatch({ type: "select-signer", id: signer.id })}
+				/>
+				<input
+					aria-label={`Email for signer ${index + 1}`}
+					type="email"
+					value={signer.email}
+					maxLength={200}
+					placeholder="Email"
+					className="h-8 min-w-0 rounded-md bg-transparent px-1 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					onChange={(event) =>
+						dispatch({
+							type: "set-signer-email",
+							id: signer.id,
+							email: event.target.value,
+						})
+					}
+					onClick={() => dispatch({ type: "select-signer", id: signer.id })}
+				/>
+			</div>
 			<button
 				type="button"
 				aria-label="Move signer earlier"
