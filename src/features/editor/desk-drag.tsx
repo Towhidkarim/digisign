@@ -173,7 +173,7 @@ export function DeskDrag({
 			>
 				{active?.type === "field" ? (
 					<div
-						className="flex h-full w-full items-center justify-center rounded-md border-2 bg-white/80 text-sm text-foreground shadow-[0_10px_24px_rgba(18,52,74,0.16)]"
+						className="flex h-full w-full items-center justify-center rounded-md border-2 bg-card/90 text-sm text-foreground shadow-[0_10px_24px_rgba(18,52,74,0.16)]"
 						style={{ borderColor: fieldColor }}
 					>
 						{FIELD_LABEL[active.kind]}

@@ -7,7 +7,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--desk: #e7f4fc;
+	--desk: #f3f9fd;
 	--paper: #f8fcff;
 	--ink: #12344a;
 	--harbor: #1a7cb5;
@@ -149,27 +149,8 @@ body {
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
-
-a {
-	color: var(--harbor-deep);
-	text-decoration-thickness: 1px;
-	text-underline-offset: 3px;
-}
 button {
 	cursor: pointer;
-}
-
-a:hover {
-	color: var(--harbor);
-}
-
-a[data-slot="button"][data-variant="default"] {
-	color: var(--primary-foreground);
-	text-decoration: none;
-}
-
-a[data-slot="button"][data-variant="default"]:hover {
-	color: var(--primary-foreground);
 }
 
 code {

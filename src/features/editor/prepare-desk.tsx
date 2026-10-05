@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
 	Suspense,
 	useCallback,
@@ -9,18 +9,29 @@ import {
 	useState,
 } from "react";
 
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { limits } from "#/core/limits.ts";
-import { SignOutButton } from "#/features/auth/auth-form.tsx";
+import { displayTitle } from "#/features/dashboard/format.ts";
 import { DeskDrag } from "#/features/editor/desk-drag.tsx";
 import {
 	type Draft,
+	discardPrepareDraft,
 	getDraft,
 	hydrateDraft,
 	initUpload,
 	loadServerDraft,
 	publishDocument,
-	reissueInvite,
+	resumeServerDraft,
 	saveLayout,
 	savePreparation,
 	saveSigners,
@@ -39,12 +50,70 @@ const PERCENTS = [50, 75, 100, 125, 150, 200] as const;
 
 export function PrepareDesk() {
 	const fileRef = useRef<HTMLInputElement>(null);
-	const [session, setSession] = useState<Draft>(() => {
-		hydrateDraft();
-		return getDraft();
+	const dragDepth = useRef(0);
+	const requestedId = useSearch({
+		from: "/prepare",
+		select: (search) => search.documentId,
 	});
-	const [phase, setPhase] = useState<"idle" | "reading">("idle");
+	const [over, setOver] = useState(false);
+	const [session, setSession] = useState<Draft>({
+		fileName: "",
+		bytes: null,
+		upload: null,
+		signers: [],
+		layout: null,
+	});
+	const [resume, setResume] = useState<Draft | null>(null);
+	const [phase, setPhase] = useState<"idle" | "reading" | "opening">("idle");
 	const [error, setError] = useState("");
+
+	useEffect(() => {
+		let cancelled = false;
+		if (requestedId) {
+			setPhase("opening");
+			void resumeServerDraft(requestedId).then((result) => {
+				if (cancelled) return;
+				setPhase("idle");
+				if ("error" in result) {
+					setError(result.error);
+					return;
+				}
+				setSession({ ...result, bytes: result.bytes });
+			});
+			return () => {
+				cancelled = true;
+			};
+		}
+		const stored = hydrateDraft();
+		const storedId = stored.upload?.documentId;
+		if (!storedId) return;
+		void loadServerDraft(storedId).then((result) => {
+			if (cancelled) return;
+			const currentId = getDraft().upload?.documentId;
+			if (currentId && currentId !== storedId) return;
+			if ("error" in result || result.status !== "draft") {
+				discardPrepareDraft();
+				return;
+			}
+			if (stored.bytes) setResume({ ...stored, bytes: stored.bytes });
+			else setSession({ ...stored });
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [requestedId]);
+
+	function takeFile(file: File | undefined) {
+		if (!file || phase !== "idle") return;
+		const pdf =
+			file.type === "application/pdf" ||
+			file.name.toLowerCase().endsWith(".pdf");
+		if (!pdf) {
+			setError("Choose a PDF.");
+			return;
+		}
+		void openFile(file);
+	}
 
 	async function openFile(file: File) {
 		setError("");
@@ -70,14 +139,16 @@ export function PrepareDesk() {
 	return (
 		<div className="flex h-dvh flex-col bg-background text-foreground">
 			<input
+				id="prepare-pdf"
 				ref={fileRef}
 				type="file"
 				accept="application/pdf,.pdf"
 				className="sr-only"
+				disabled={phase !== "idle"}
 				onChange={(event) => {
 					const file = event.target.files?.[0];
 					event.target.value = "";
-					if (file) void openFile(file);
+					takeFile(file);
 				}}
 			/>
 			{ready && session.upload && session.bytes ? (
@@ -92,37 +163,89 @@ export function PrepareDesk() {
 					viewError={error}
 				/>
 			) : (
-				<main className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+				<main className="flex flex-1 flex-col px-6 pt-6 md:px-10 md:pt-10">
 					<Link
-						to="/"
-						className="text-lg font-semibold tracking-tight"
-						style={{ color: "var(--harbor)", textDecoration: "none" }}
+						to="/dashboard"
+						className="text-sm font-medium text-primary no-underline hover:text-primary"
 					>
-						DigiSign
+						Dashboard
 					</Link>
-					<h1 className="mt-8 text-[1.65rem] font-semibold tracking-tight text-[var(--harbor)]">
-						Choose a PDF
-					</h1>
-					<p className="mt-3 max-w-sm text-muted-foreground">
-						The preview stays in this tab. The file is stored for the signers.
-					</p>
-					{session.upload && !session.bytes ? (
-						<p className="mt-4 max-w-sm text-muted-foreground">
-							This document was too large to keep in the tab. Choose the PDF
-							again.
+					<div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center pb-16">
+						<h1 className="text-[clamp(1.7rem,3vw,2.1rem)] font-semibold tracking-tight">
+							Choose a PDF
+						</h1>
+						<p className="mt-3 max-w-[42ch] leading-relaxed text-muted-foreground">
+							Place the fields, name who signs and in what order, then send.
+							Until you send, the document stays a draft.
 						</p>
-					) : null}
-					<Button
-						className="mt-6"
-						disabled={phase === "reading"}
-						onClick={() => fileRef.current?.click()}
-					>
-						{phase === "reading" ? "Reading the PDF…" : "Choose a PDF"}
-					</Button>
-					{error ? (
-						<p className="mt-4 max-w-sm text-destructive">{error}</p>
-					) : null}
-					<SignOutButton />
+						{session.upload && !session.bytes ? (
+							<p className="mt-4 max-w-[42ch] text-sm text-muted-foreground">
+								This document was too large to keep in the tab. Choose the PDF
+								again.
+							</p>
+						) : null}
+						<label
+							htmlFor="prepare-pdf"
+							onDragEnter={(event) => {
+								event.preventDefault();
+								dragDepth.current += 1;
+								setOver(true);
+							}}
+							onDragOver={(event) => {
+								event.preventDefault();
+								event.dataTransfer.dropEffect = "copy";
+							}}
+							onDragLeave={() => {
+								dragDepth.current -= 1;
+								if (dragDepth.current <= 0) {
+									dragDepth.current = 0;
+									setOver(false);
+								}
+							}}
+							onDrop={(event) => {
+								event.preventDefault();
+								dragDepth.current = 0;
+								setOver(false);
+								takeFile(event.dataTransfer.files[0]);
+							}}
+							className={
+								over
+									? "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-[0.9rem] border border-dashed border-primary bg-accent px-6 py-10"
+									: "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-[0.9rem] border border-dashed border-border bg-card px-6 py-10"
+							}
+						>
+							<p className="text-lg font-medium">
+								{phase === "opening"
+									? "Opening the draft…"
+									: phase === "reading"
+										? "Reading the PDF…"
+										: over
+											? "Drop it to open"
+											: "Drop a PDF here"}
+							</p>
+							<p className="mt-2 max-w-[36ch] text-sm text-muted-foreground">
+								Or click to choose a file from this computer.
+							</p>
+						</label>
+						{resume?.upload && resume.bytes && !requestedId ? (
+							<button
+								type="button"
+								className="mt-4 w-fit text-sm font-medium text-primary"
+								disabled={phase !== "idle"}
+								onClick={() => setSession({ ...resume, bytes: resume.bytes })}
+							>
+								Continue {displayTitle(resume.fileName) || "draft"}
+							</button>
+						) : null}
+						{error ? (
+							<p
+								className="mt-4 max-w-[42ch] text-sm text-destructive"
+								role="alert"
+							>
+								{error}
+							</p>
+						) : null}
+					</div>
 				</main>
 			)}
 		</div>
@@ -164,8 +287,13 @@ function Editor({
 						: 0,
 			}),
 	);
+	const navigate = useNavigate();
 	const [sent, setSent] = useState(false);
+	const [sentOpen, setSentOpen] = useState(false);
 	const [sending, setSending] = useState(false);
+	const [saveState, setSaveState] = useState<"saving" | "saved" | "error" | "">(
+		"",
+	);
 	const [invited, setInvited] = useState<
 		{ id: string; name: string; email: string }[]
 	>([]);
@@ -182,6 +310,7 @@ function Editor({
 	const versionRef = useRef(state.layoutVersion);
 	const saveChain = useRef(Promise.resolve());
 	const sendingRef = useRef(false);
+	const lockedRef = useRef(false);
 
 	const enqueueSave = useCallback(
 		(snapshot: {
@@ -228,22 +357,32 @@ function Editor({
 	);
 
 	useEffect(() => {
+		if (lockedRef.current) return;
 		const snapshot = {
 			documentId: state.documentId,
 			signers: state.signers,
 			fields: state.fields,
 		};
 		let cancelled = false;
+		setSaveState("saving");
 		const id = window.setTimeout(() => {
-			if (sendingRef.current) return;
+			if (cancelled || sendingRef.current || lockedRef.current) return;
 			void enqueueSave(snapshot).then((result) => {
-				if (cancelled || sendingRef.current) return;
-				if (
-					"error" in result &&
-					!result.error.includes("no longer be edited")
-				) {
+				if (cancelled || sendingRef.current || lockedRef.current) return;
+				if ("error" in result) {
+					if (result.error.includes("no longer be edited")) {
+						lockedRef.current = true;
+						setSent(true);
+						setSentOpen(true);
+						setSaveState("saved");
+						return;
+					}
+					setSaveState("error");
 					setNotice(result.error);
+					return;
 				}
+				setSaveState("saved");
+				setNotice("");
 			});
 		}, 300);
 		return () => {
@@ -254,51 +393,156 @@ function Editor({
 
 	useEffect(() => {
 		function flush() {
+			if (lockedRef.current || sendingRef.current) return;
 			const current = stateRef.current;
 			saveSigners(current.signers);
 			saveLayout(toSaveLayout(current));
+			void enqueueSave({
+				documentId: current.documentId,
+				signers: current.signers,
+				fields: current.fields,
+			});
 		}
 		window.addEventListener("pagehide", flush);
 		return () => window.removeEventListener("pagehide", flush);
-	}, []);
+	}, [enqueueSave]);
+
+	const nextName = invited[0]?.name.trim() ?? "";
+
+	async function leave() {
+		if (!lockedRef.current) {
+			const current = stateRef.current;
+			setSaveState("saving");
+			const saved = await enqueueSave({
+				documentId: current.documentId,
+				signers: current.signers,
+				fields: current.fields,
+			});
+			if ("error" in saved && !saved.error.includes("no longer be edited")) {
+				setSaveState("error");
+				setNotice(saved.error);
+				return;
+			}
+		}
+		await navigate({
+			to: "/documents/$documentId",
+			params: { documentId: stateRef.current.documentId },
+		});
+	}
+
+	async function send() {
+		if (lockedRef.current || sendingRef.current) return;
+		sendingRef.current = true;
+		setSending(true);
+		setNotice("");
+		const current = stateRef.current;
+		saveSigners(current.signers);
+		saveLayout(toSaveLayout(current));
+		const saved = await enqueueSave({
+			documentId: current.documentId,
+			signers: current.signers,
+			fields: current.fields,
+		});
+		if ("error" in saved) {
+			sendingRef.current = false;
+			setSending(false);
+			setSaveState("error");
+			setNotice(saved.error);
+			return;
+		}
+		const published = await publishDocument(current.documentId);
+		if ("error" in published) {
+			sendingRef.current = false;
+			setSending(false);
+			setNotice(published.error);
+			return;
+		}
+		lockedRef.current = true;
+		setSent(true);
+		setSentOpen(true);
+		setSaveState("saved");
+		setSending(false);
+		sendingRef.current = false;
+		for (let attempt = 0; attempt < 8; attempt += 1) {
+			const fresh = await loadServerDraft(current.documentId);
+			if (!("error" in fresh)) {
+				const waiting = fresh.signers.filter(
+					(signer) => signer.status === "invited",
+				);
+				if (waiting.length > 0) {
+					setInvited(
+						waiting.map((signer) => ({
+							id: signer.id,
+							name: signer.name,
+							email: signer.email,
+						})),
+					);
+					break;
+				}
+			}
+			await new Promise((resolve) => setTimeout(resolve, 750));
+		}
+	}
 
 	return (
 		<>
-			<header className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
-				<Link
-					to="/"
-					className="text-lg font-semibold tracking-tight"
-					style={{ color: "var(--harbor)", textDecoration: "none" }}
+			<header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-card px-3 py-2 md:px-4">
+				<Button
+					type="button"
+					variant="ghost"
+					size="sm"
+					onClick={() => void leave()}
 				>
-					DigiSign
-				</Link>
-				<p className="min-w-0 flex-1 truncate text-sm text-foreground">
+					Close
+				</Button>
+				<p className="min-w-0 max-w-[20ch] truncate text-sm font-medium sm:max-w-[32ch]">
 					{fileName || "Document"}
 				</p>
-				<p className="text-sm text-muted-foreground">
-					Page {pageNumber} of {upload.pageCount}
+				<p
+					className={
+						saveState === "error"
+							? "text-sm text-destructive"
+							: "text-sm text-muted-foreground"
+					}
+				>
+					{sent
+						? ""
+						: saveState === "saving"
+							? "Saving draft…"
+							: saveState === "saved"
+								? "Draft saved"
+								: saveState === "error"
+									? "Draft not saved"
+									: ""}
 				</p>
-				<div className="flex items-center gap-1">
-					<button
+				<div className="ml-auto flex flex-wrap items-center gap-1">
+					<p className="px-1 text-sm text-muted-foreground tabular-nums">
+						Page {pageNumber} of {upload.pageCount}
+					</p>
+					<Button
 						type="button"
+						variant="ghost"
+						size="sm"
 						aria-pressed={zoom.mode === "fit-width"}
-						className="rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent aria-pressed:bg-secondary"
+						className="aria-pressed:bg-secondary"
 						onClick={() => setZoom({ mode: "fit-width" })}
 					>
 						Fit width
-					</button>
-					<button
+					</Button>
+					<Button
 						type="button"
+						variant="ghost"
+						size="sm"
 						aria-pressed={zoom.mode === "fit-page"}
-						className="rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent aria-pressed:bg-secondary"
+						className="aria-pressed:bg-secondary"
 						onClick={() => setZoom({ mode: "fit-page" })}
 					>
 						Fit page
-					</button>
+					</Button>
 					<label className="text-sm text-foreground">
 						<span className="sr-only">Zoom</span>
 						<select
-							className="rounded-md border border-border bg-background px-2 py-1"
+							className="h-8 rounded-md border border-border bg-background px-2"
 							value={zoom.mode === "percent" ? String(zoom.percent) : ""}
 							onChange={(event) =>
 								setZoom({
@@ -317,133 +561,70 @@ function Editor({
 							))}
 						</select>
 					</label>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						disabled={sent || state.past.length === 0}
+						onClick={() => dispatch({ type: "undo" })}
+					>
+						Undo
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						disabled={sent || state.future.length === 0}
+						onClick={() => dispatch({ type: "redo" })}
+					>
+						Redo
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="sm"
+						disabled={sending}
+						onClick={onReplace}
+					>
+						Choose another PDF
+					</Button>
+					<Button
+						type="button"
+						size="sm"
+						disabled={sent || sending}
+						onClick={() => void send()}
+					>
+						{sending ? "Sending…" : "Send for signature"}
+					</Button>
 				</div>
-				<button
-					type="button"
-					className="rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent disabled:opacity-40"
-					disabled={state.past.length === 0}
-					onClick={() => dispatch({ type: "undo" })}
-				>
-					Undo
-				</button>
-				<button
-					type="button"
-					className="rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent disabled:opacity-40"
-					disabled={state.future.length === 0}
-					onClick={() => dispatch({ type: "redo" })}
-				>
-					Redo
-				</button>
-				<button
-					type="button"
-					className="rounded-md bg-[var(--harbor)] px-3 py-1.5 text-sm text-white disabled:opacity-40"
-					disabled={sent || sending}
-					onClick={() => {
-						void (async () => {
-							sendingRef.current = true;
-							setSending(true);
-							setNotice("");
-							const current = stateRef.current;
-							saveSigners(current.signers);
-							saveLayout(toSaveLayout(current));
-							const saved = await enqueueSave({
-								documentId: current.documentId,
-								signers: current.signers,
-								fields: current.fields,
-							});
-							if ("error" in saved) {
-								sendingRef.current = false;
-								setSending(false);
-								setNotice(saved.error);
-								return;
-							}
-							const published = await publishDocument(current.documentId);
-							if ("error" in published) {
-								sendingRef.current = false;
-								setSending(false);
-								setNotice(published.error);
-								return;
-							}
-							// The invite goes out through the queue, so the first signer turns
-							// "invited" a moment after publish. Look a few times before giving up.
-							for (let attempt = 0; attempt < 8; attempt += 1) {
-								const fresh = await loadServerDraft(current.documentId);
-								if (!("error" in fresh)) {
-									const waiting = fresh.signers.filter(
-										(signer) => signer.status === "invited",
-									);
-									if (waiting.length > 0) {
-										setInvited(
-											waiting.map((signer) => ({
-												id: signer.id,
-												name: signer.name,
-												email: signer.email,
-											})),
-										);
-										break;
-									}
-								}
-								await new Promise((resolve) => setTimeout(resolve, 750));
-							}
-							setNotice(
-								"Sent for signature. The invite link is printed in the server console.",
-							);
-							setSent(true);
-						})();
-					}}
-				>
-					Send for signature
-				</button>
-				<button
-					type="button"
-					className="rounded-md px-2 py-1 text-sm text-[var(--harbor)] hover:underline"
-					onClick={onReplace}
-				>
-					Choose another PDF
-				</button>
 			</header>
 			{viewError || drawnError ? (
-				<p className="border-b border-border px-3 py-2 text-sm text-destructive">
+				<p
+					className="border-b border-border px-3 py-2 text-sm text-destructive"
+					role="alert"
+				>
 					{viewError || drawnError}
 				</p>
 			) : null}
 			{notice ? (
-				<p className="border-b border-border px-3 py-2 text-sm text-muted-foreground">
+				<p
+					className="border-b border-border px-3 py-2 text-sm text-destructive"
+					role="alert"
+				>
 					{notice}
 				</p>
 			) : null}
 			{sent ? (
-				<section className="border-b border-border px-3 py-3">
-					<h2 className="text-sm font-medium">Invite links</h2>
-					<p className="mt-1 text-sm text-muted-foreground">
-						Send link again prints a new link in the server console. This page
-						does not keep the link.
-					</p>
-					<ul className="mt-3 flex flex-col gap-2">
-						{invited.map((signer) => (
-							<li key={signer.id} className="flex items-center gap-3 text-sm">
-								<span className="min-w-0 flex-1 truncate">
-									{signer.name || "Signer"} · {signer.email || "No email"}
-								</span>
-								<button
-									type="button"
-									className="rounded-md px-2 py-1 text-[var(--harbor)] hover:underline"
-									onClick={() => {
-										void reissueInvite(signer.id).then((result) => {
-											setNotice(
-												"error" in result
-													? result.error
-													: "A new link was printed in the server console.",
-											);
-										});
-									}}
-								>
-									Send link again
-								</button>
-							</li>
-						))}
-					</ul>
-				</section>
+				<p className="border-b border-border px-3 py-2 text-sm text-muted-foreground">
+					This document can no longer be edited.{" "}
+					<button
+						type="button"
+						className="font-medium text-primary underline-offset-2 hover:underline"
+						onClick={() => void leave()}
+					>
+						Open it
+					</button>
+				</p>
 			) : null}
 			<DeskDrag
 				signers={state.signers}
@@ -453,7 +634,10 @@ function Editor({
 				}
 				dispatch={dispatch}
 			>
-				<div className="flex min-h-0 flex-1 flex-row">
+				<div
+					className="flex min-h-0 flex-1 flex-row"
+					inert={sent ? true : undefined}
+				>
 					<SignerRail
 						signers={state.signers}
 						selectedSignerId={state.selectedSignerId}
@@ -479,6 +663,24 @@ function Editor({
 					</div>
 				</div>
 			</DeskDrag>
+			<AlertDialog open={sentOpen} onOpenChange={setSentOpen}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Sent for signature</AlertDialogTitle>
+						<AlertDialogDescription>
+							{nextName
+								? `${nextName} is next. This document can no longer be edited. Open it to copy their signing link.`
+								: "This document can no longer be edited. The next person is invited in order. Open it to copy their signing link."}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Stay here</AlertDialogCancel>
+						<AlertDialogAction onClick={() => void leave()}>
+							Open this document
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

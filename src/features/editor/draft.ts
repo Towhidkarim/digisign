@@ -126,16 +126,26 @@ export async function initUpload(file: {
 		fileName: title,
 		bytes: file.bytes,
 		upload,
-		signers: (draft.signers.length > 0 ? draft.signers : [defaultSigner()]).map(
-			(signer) => ({ ...signer, email: signer.email ?? "" }),
-		),
+		signers: [defaultSigner()],
 		layout: {
 			documentId: upload.documentId,
 			layoutVersion: 0,
 			fields: [],
 		},
 	};
+	cachedBase64 = null;
+	persist();
 	return upload;
+}
+
+/** Drop the tab's copy so Create starts on a new PDF. The server draft is unchanged. */
+export function discardPrepareDraft(): void {
+	draft = emptyDraft();
+	cachedBase64 = null;
+	hydrated = true;
+	if (typeof sessionStorage !== "undefined") {
+		sessionStorage.removeItem(STORAGE_KEY);
+	}
 }
 
 export async function savePreparation(input: {
@@ -169,6 +179,54 @@ export async function savePreparation(input: {
 
 export async function loadServerDraft(documentId: string) {
 	return getDraftFn({ data: { documentId } });
+}
+
+/** Open a draft that already lives on the server, including its stored PDF. */
+export async function resumeServerDraft(
+	documentId: string,
+): Promise<Draft | { error: string }> {
+	const loaded = await getDraftFn({ data: { documentId } });
+	if ("error" in loaded) return loaded;
+	if (loaded.status !== "draft") {
+		return { error: "This document can no longer be edited." };
+	}
+	if (!loaded.upload) {
+		return { error: "Choose the PDF again to keep editing this draft." };
+	}
+	const response = await fetch(`/files/documents/${documentId}/source`);
+	if (!response.ok) {
+		return { error: "The PDF could not be loaded. Choose it again." };
+	}
+	const bytes = new Uint8Array(await response.arrayBuffer());
+	if (
+		bytes.byteLength !== loaded.upload.sizeBytes ||
+		(await sha256Hex(bytes)) !== loaded.upload.sha256
+	) {
+		return {
+			error: "This file no longer matches the document that was prepared.",
+		};
+	}
+	const signers =
+		loaded.signers.length > 0
+			? loaded.signers.map((signer, index) => ({
+					id: signer.id,
+					name: signer.name,
+					email: signer.email ?? "",
+					color:
+						SIGNER_COLORS[index % SIGNER_COLORS.length] ?? SIGNER_COLORS[0],
+				}))
+			: [defaultSigner()];
+	draft = {
+		fileName: loaded.title,
+		bytes,
+		upload: loaded.upload,
+		signers,
+		layout: loaded.layout,
+	};
+	cachedBase64 = null;
+	hydrated = true;
+	persist();
+	return { ...draft, bytes: draft.bytes };
 }
 
 export async function publishDocument(

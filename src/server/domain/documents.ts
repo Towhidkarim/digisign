@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { canonicalJson } from "#/core/canonical-json.ts";
@@ -15,7 +15,7 @@ import { limits } from "#/core/limits.ts";
 import { ulid } from "#/core/ulid.ts";
 import { commitOrReplay, guardedBatch } from "#/db/guarded-batch.ts";
 import { getDb } from "#/db/index.ts";
-import { documents, outbox, signers } from "#/db/schema/index.ts";
+import { auditEvents, documents, outbox, signers } from "#/db/schema/index.ts";
 import { insertAudit, planAudit } from "#/server/domain/audit.ts";
 import { publishBlocker } from "#/server/domain/publish-rules.ts";
 import { readLastOpId } from "#/server/domain/secrets.ts";
@@ -608,6 +608,177 @@ function sameFields(
 	right: readonly FieldInput[],
 ): boolean {
 	return canonicalJson(left) === canonicalJson(right);
+}
+
+export type OwnedDocument = {
+	id: string;
+	title: string;
+	status: string;
+	updatedAt: number;
+	expiresAt: number | null;
+	signers: number;
+	signed: number;
+	/** The person who currently holds the signing link. */
+	waitingOn: string | null;
+};
+
+export type OwnedSigner = {
+	id: string;
+	name: string;
+	email: string;
+	order: number;
+	status: string;
+	invitedAt: number | null;
+	firstViewedAt: number | null;
+	signedAt: number | null;
+	clientIp: string | null;
+	userAgent: string | null;
+	declineReason: string | null;
+};
+
+export type OwnedActivity = {
+	seq: number;
+	type: string;
+	occurredAt: number;
+	actorType: string;
+	actorId: string;
+	actorName: string | null;
+	reissue: boolean;
+};
+
+export type OwnedDocumentDetail = {
+	id: string;
+	title: string;
+	status: string;
+	updatedAt: number;
+	expiresAt: number | null;
+	pageCount: number;
+	uploaded: boolean;
+	signers: OwnedSigner[];
+	activity: OwnedActivity[];
+};
+
+/** Every document this creator owns, newest first, with how far the signatures have got. */
+export async function listOwnedDocuments(
+	ownerId: string,
+): Promise<OwnedDocument[]> {
+	const rows = await getDb()
+		.select({
+			id: documents.id,
+			title: documents.title,
+			status: documents.status,
+			updatedAt: documents.updatedAt,
+			expiresAt: documents.expiresAt,
+		})
+		.from(documents)
+		.where(eq(documents.ownerId, ownerId))
+		.orderBy(desc(documents.updatedAt));
+	if (rows.length === 0) return [];
+	const people = await getDb()
+		.select({
+			documentId: signers.documentId,
+			status: signers.status,
+			name: signers.name,
+		})
+		.from(signers)
+		.where(
+			inArray(
+				signers.documentId,
+				rows.map((row) => row.id),
+			),
+		);
+	return rows.map((row) => {
+		const theirs = people.filter((person) => person.documentId === row.id);
+		return {
+			...row,
+			signers: theirs.length,
+			signed: theirs.filter((person) => person.status === "signed").length,
+			waitingOn:
+				theirs.find((person) => person.status === "invited")?.name ?? null,
+		};
+	});
+}
+
+/** One document, its signers, and its record. Another owner's id is a 404. */
+export async function readOwnedDocument(
+	ownerId: string,
+	documentId: string,
+): Promise<OwnedDocumentDetail> {
+	const [document] = await getDb()
+		.select({
+			id: documents.id,
+			title: documents.title,
+			status: documents.status,
+			updatedAt: documents.updatedAt,
+			expiresAt: documents.expiresAt,
+			pageCount: documents.pageCount,
+			uploadStatus: documents.uploadStatus,
+		})
+		.from(documents)
+		.where(and(eq(documents.id, documentId), eq(documents.ownerId, ownerId)))
+		.limit(1);
+	if (!document) throw new AppError(404, "This document was not found.");
+	const people = await getDb()
+		.select({
+			id: signers.id,
+			name: signers.name,
+			email: signers.email,
+			order: signers.signingOrder,
+			status: signers.status,
+			invitedAt: signers.invitedAt,
+			firstViewedAt: signers.firstViewedAt,
+			signedAt: signers.signedAt,
+			clientIp: signers.clientIp,
+			userAgent: signers.userAgent,
+			declineReason: signers.declineReason,
+		})
+		.from(signers)
+		.where(eq(signers.documentId, documentId))
+		.orderBy(asc(signers.signingOrder));
+	const events = await getDb()
+		.select({
+			seq: auditEvents.seq,
+			type: auditEvents.type,
+			occurredAt: auditEvents.occurredAt,
+			actorType: auditEvents.actorType,
+			actorId: auditEvents.actorId,
+			payloadJson: auditEvents.payloadJson,
+		})
+		.from(auditEvents)
+		.where(eq(auditEvents.documentId, documentId))
+		.orderBy(asc(auditEvents.seq));
+	const names = new Map(people.map((person) => [person.id, person.name]));
+	return {
+		id: document.id,
+		title: document.title,
+		status: document.status,
+		updatedAt: document.updatedAt,
+		expiresAt: document.expiresAt,
+		pageCount: document.pageCount,
+		uploaded: document.uploadStatus === "uploaded",
+		signers: people,
+		activity: events.map((event) => ({
+			seq: event.seq,
+			type: event.type,
+			occurredAt: event.occurredAt,
+			actorType: event.actorType,
+			actorId: event.actorId,
+			actorName:
+				event.actorType === "signer"
+					? (names.get(event.actorId) ?? null)
+					: null,
+			reissue: payloadFlag(event.payloadJson, "reissue"),
+		})),
+	};
+}
+
+function payloadFlag(json: string, key: string): boolean {
+	try {
+		const parsed = JSON.parse(json) as Record<string, unknown>;
+		return parsed[key] === true;
+	} catch {
+		return false;
+	}
 }
 
 function sameSigners(

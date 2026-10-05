@@ -3,7 +3,11 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ulid } from "#/core/ulid.ts";
 import { getAuth } from "#/lib/auth.ts";
 import { readActor, resolveActor } from "#/server/actor.ts";
-import { getDraft } from "#/server/domain/documents.ts";
+import {
+	getDraft,
+	listOwnedDocuments,
+	readOwnedDocument,
+} from "#/server/domain/documents.ts";
 import { createReadGrant } from "#/server/domain/grants.ts";
 import { inviteNextSigner } from "#/server/domain/invite.ts";
 import { secretHash } from "#/server/domain/secrets.ts";
@@ -173,6 +177,24 @@ describe("phase 4 auth", () => {
 
 		const { grant } = await createReadGrant(built.documentId, Date.now());
 		expect((await read({ grant })).status).toBe(404);
+	});
+
+	it("a creator's list includes their document and leaves out another owner's", async () => {
+		const built = await buildPublished(1);
+		const own = await listOwnedDocuments(DEV_OWNER_ID);
+		const found = own.find((document) => document.id === built.documentId);
+		expect(found?.signers).toBe(1);
+		expect(found?.signed).toBe(0);
+		expect(found?.waitingOn).toBeNull();
+		const detail = await readOwnedDocument(DEV_OWNER_ID, built.documentId);
+		expect(detail.signers).toHaveLength(1);
+		await expect(
+			readOwnedDocument("01OTHEROWNER00000000000000", built.documentId),
+		).rejects.toMatchObject({ status: 404 });
+		const other = await listOwnedDocuments("01OTHEROWNER00000000000000");
+		expect(other.some((document) => document.id === built.documentId)).toBe(
+			false,
+		);
 	});
 
 	it("R-4.1 cross-site writes are refused and same-site ones pass", () => {

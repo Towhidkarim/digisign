@@ -6,7 +6,7 @@ import { getSessionFn } from "#/server/session.ts";
 export const Route = createFileRoute("/signup")({
 	ssr: false,
 	beforeLoad: async () => {
-		if (await getSessionFn()) throw redirect({ to: "/prepare" });
+		if (await getSessionFn()) throw redirect({ to: "/dashboard" });
 	},
 	component: () => <AuthForm mode="signup" />,
 });

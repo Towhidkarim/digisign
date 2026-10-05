@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrepareRouteImport } from './routes/prepare'
 import { Route as SignRouteImport } from './routes/sign'
@@ -17,6 +19,8 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as DotwellKnownDigisignKeysDotjsonRouteImport } from './routes/[.]well-known/digisign-keys[.]json'
 import { Route as DevFoundationsRouteImport } from './routes/dev/foundations'
+import { Route as DocumentsIndexRouteImport } from './routes/documents.index'
+import { Route as DocumentsDocumentIdRouteImport } from './routes/documents.$documentId'
 import { Route as STokenRouteImport } from './routes/s/$token'
 import { Route as VDocumentIdRouteImport } from './routes/v.$documentId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -25,6 +29,16 @@ import { Route as FilesDocumentsIdSourceRouteImport } from './routes/files/docum
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocumentsRoute = DocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -63,6 +77,16 @@ const DevFoundationsRoute = DevFoundationsRouteImport.update({
   path: '/dev/foundations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocumentsIndexRoute = DocumentsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DocumentsRoute,
+} as any)
+const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
+  id: '/$documentId',
+  path: '/$documentId',
+  getParentRoute: () => DocumentsRoute,
+} as any)
 const STokenRoute = STokenRouteImport.update({
   id: '/s/$token',
   path: '/s/$token',
@@ -86,6 +110,8 @@ const FilesDocumentsIdSourceRoute = FilesDocumentsIdSourceRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/documents': typeof DocumentsRouteWithChildren
   '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
@@ -93,13 +119,16 @@ export interface FileRoutesByFullPath {
   '/verify': typeof VerifyRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dev/foundations': typeof DevFoundationsRoute
+  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/s/$token': typeof STokenRoute
   '/v/$documentId': typeof VDocumentIdRoute
+  '/documents/': typeof DocumentsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
@@ -107,14 +136,18 @@ export interface FileRoutesByTo {
   '/verify': typeof VerifyRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dev/foundations': typeof DevFoundationsRoute
+  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/s/$token': typeof STokenRoute
   '/v/$documentId': typeof VDocumentIdRoute
+  '/documents': typeof DocumentsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/documents': typeof DocumentsRouteWithChildren
   '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
@@ -122,8 +155,10 @@ export interface FileRoutesById {
   '/verify': typeof VerifyRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dev/foundations': typeof DevFoundationsRoute
+  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/s/$token': typeof STokenRoute
   '/v/$documentId': typeof VDocumentIdRoute
+  '/documents/': typeof DocumentsIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
@@ -131,6 +166,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dashboard'
+    | '/documents'
     | '/login'
     | '/prepare'
     | '/sign'
@@ -138,13 +175,16 @@ export interface FileRouteTypes {
     | '/verify'
     | '/.well-known/digisign-keys.json'
     | '/dev/foundations'
+    | '/documents/$documentId'
     | '/s/$token'
     | '/v/$documentId'
+    | '/documents/'
     | '/api/auth/$'
     | '/files/documents/$id/source'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dashboard'
     | '/login'
     | '/prepare'
     | '/sign'
@@ -152,13 +192,17 @@ export interface FileRouteTypes {
     | '/verify'
     | '/.well-known/digisign-keys.json'
     | '/dev/foundations'
+    | '/documents/$documentId'
     | '/s/$token'
     | '/v/$documentId'
+    | '/documents'
     | '/api/auth/$'
     | '/files/documents/$id/source'
   id:
     | '__root__'
     | '/'
+    | '/dashboard'
+    | '/documents'
     | '/login'
     | '/prepare'
     | '/sign'
@@ -166,14 +210,18 @@ export interface FileRouteTypes {
     | '/verify'
     | '/.well-known/digisign-keys.json'
     | '/dev/foundations'
+    | '/documents/$documentId'
     | '/s/$token'
     | '/v/$documentId'
+    | '/documents/'
     | '/api/auth/$'
     | '/files/documents/$id/source'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
+  DocumentsRoute: typeof DocumentsRouteWithChildren
   LoginRoute: typeof LoginRoute
   PrepareRoute: typeof PrepareRoute
   SignRoute: typeof SignRoute
@@ -194,6 +242,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/documents': {
+      id: '/documents'
+      path: '/documents'
+      fullPath: '/documents'
+      preLoaderRoute: typeof DocumentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -245,6 +307,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevFoundationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/documents/': {
+      id: '/documents/'
+      path: '/'
+      fullPath: '/documents/'
+      preLoaderRoute: typeof DocumentsIndexRouteImport
+      parentRoute: typeof DocumentsRoute
+    }
+    '/documents/$documentId': {
+      id: '/documents/$documentId'
+      path: '/$documentId'
+      fullPath: '/documents/$documentId'
+      preLoaderRoute: typeof DocumentsDocumentIdRouteImport
+      parentRoute: typeof DocumentsRoute
+    }
     '/s/$token': {
       id: '/s/$token'
       path: '/s/$token'
@@ -276,8 +352,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DocumentsRouteChildren {
+  DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
+  DocumentsIndexRoute: typeof DocumentsIndexRoute
+}
+
+const DocumentsRouteChildren: DocumentsRouteChildren = {
+  DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
+  DocumentsIndexRoute: DocumentsIndexRoute,
+}
+
+const DocumentsRouteWithChildren = DocumentsRoute._addFileChildren(
+  DocumentsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
+  DocumentsRoute: DocumentsRouteWithChildren,
   LoginRoute: LoginRoute,
   PrepareRoute: PrepareRoute,
   SignRoute: SignRoute,

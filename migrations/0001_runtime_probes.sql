@@ -1,4 +1,4 @@
-CREATE TABLE runtime_probes (
+CREATE TABLE IF NOT EXISTS runtime_probes (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	kind TEXT NOT NULL,
 	payload TEXT NOT NULL,

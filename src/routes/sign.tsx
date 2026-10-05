@@ -1,6 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SigningDesk } from "#/features/sign/signing-desk.tsx";
+import { lazyDesk } from "#/lib/lazy-desk.tsx";
+
+const SigningDesk = lazyDesk<object>(
+	import.meta.env.SSR
+		? null
+		: () =>
+				import("#/features/sign/signing-desk.tsx").then((module) => ({
+					default: module.SigningDesk,
+				})),
+);
 
 export const Route = createFileRoute("/sign")({
 	ssr: false,

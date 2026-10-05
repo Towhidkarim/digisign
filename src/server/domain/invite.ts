@@ -239,12 +239,16 @@ export async function reissueInvite(input: {
 	signerId: string;
 	origin: string;
 	now?: number;
-}): Promise<{ ok: true; documentId: string }> {
+}): Promise<{ ok: true; documentId: string; token: string }> {
 	const [signer] = await getDb()
 		.select({ documentId: signers.documentId })
 		.from(signers)
 		.where(eq(signers.id, input.signerId))
 		.limit(1);
-	await reissueSignerLink({ ...input, template: "invite" });
-	return { ok: true, documentId: signer?.documentId ?? "" };
+	const issued = await reissueSignerLink({ ...input, template: "invite" });
+	return {
+		ok: true,
+		documentId: signer?.documentId ?? "",
+		token: issued.token,
+	};
 }

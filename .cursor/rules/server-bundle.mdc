@@ -1,0 +1,16 @@
+---
+description: Keep browser-only PDF libraries out of the Cloudflare Worker bundle
+alwaysApply: true
+---
+
+# Worker bundle rule
+
+The Worker (server) bundle must not contain pdf-lib, pdf.js, or fontkit. PDF work happens in the browser only, and Workers Free allows 3 MB gzipped.
+
+- Every route that renders a screen using pdf-lib, pdf.js, fontkit, or react-pdf loads it with `lazyDesk` from `src/lib/lazy-desk.tsx`:
+  `lazyDesk(import.meta.env.SSR ? null : () => import("#/features/..."))`
+  The `import.meta.env.SSR` check must stay at the call site so the build removes the import from the server bundle.
+- `ssr: false` on a route does not keep imports out of the server bundle. Do not rely on it for that.
+- Do not import `#/pdf/*`, `#/features/editor/*`, `#/features/sign/*` (except types), or `#/features/verify/*` from server code (`src/server/**`, `src/server-entry.ts`) or from a route file at the top level.
+- The server build uses `codeSplitting: false` in `vite.config.ts`. Dynamic imports are inlined there, so `import()` alone does not keep code out.
+- After adding or changing routes or heavy dependencies, run `pnpm build` then `pnpm check:bundle`. It fails when those libraries appear in `dist/server/index.js` or the gzipped size passes 1000 KB.

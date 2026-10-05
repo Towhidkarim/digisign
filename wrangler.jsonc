@@ -8,6 +8,7 @@
 	"compatibility_date": "2026-10-01",
 	"compatibility_flags": ["nodejs_compat"],
 	"main": "src/server-entry.ts",
+	"preview_urls": false,
 	"observability": {
 		"enabled": true
 	},
@@ -16,7 +17,7 @@
 		{
 			"binding": "DB",
 			"database_name": "digisign",
-			"database_id": "00000000-0000-4000-8000-000000000001",
+			"database_id": "5e84d638-323e-4aaf-a470-db9da169c036",
 			"migrations_dir": "migrations"
 		}
 	],

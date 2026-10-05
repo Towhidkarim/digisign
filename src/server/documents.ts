@@ -13,7 +13,9 @@ import {
 	createDraftInputSchema,
 	getDraft,
 	initUpload,
+	listOwnedDocuments,
 	publish,
+	readOwnedDocument,
 	saveLayout,
 	savePreparation,
 	savePreparationInputSchema,
@@ -25,8 +27,50 @@ import { reissueInvite } from "#/server/domain/invite.ts";
 import { publishOutboxQuietly } from "#/server/engine/outbox.ts";
 import { isAppError } from "#/server/errors.ts";
 
+function draftUpload(document: {
+	id: string;
+	status: string;
+	sourceSha256: string | null;
+	sourceSize: number | null;
+	pageCount: number;
+	geometryJson: string | null;
+}) {
+	if (
+		document.status !== "draft" ||
+		!document.geometryJson ||
+		!document.sourceSha256 ||
+		document.sourceSize == null
+	) {
+		return null;
+	}
+	try {
+		const parsed = uploadInitSchema.safeParse({
+			documentId: document.id,
+			sha256: document.sourceSha256,
+			sizeBytes: document.sourceSize,
+			pageCount: document.pageCount,
+			geometry: JSON.parse(document.geometryJson) as unknown,
+		});
+		return parsed.success ? parsed.data : null;
+	} catch {
+		return null;
+	}
+}
+
 const signerIdSchema = z.strictObject({ signerId: ulidSchema });
 const documentIdSchema = z.strictObject({ documentId: ulidSchema });
+
+export const listDocumentsFn = createServerFn({ method: "GET" }).handler(
+	async () => settle(async () => listOwnedDocuments((await resolveActor()).id)),
+);
+
+export const getDocumentFn = createServerFn({ method: "GET" })
+	.validator(documentIdSchema)
+	.handler(async ({ data }) =>
+		settle(async () =>
+			readOwnedDocument((await resolveActor()).id, data.documentId),
+		),
+	);
 
 export const createDraftFn = createServerFn({ method: "POST" })
 	.validator(createDraftInputSchema)
@@ -48,6 +92,7 @@ export const getDraftFn = createServerFn({ method: "GET" })
 				uploadStatus: loaded.document.uploadStatus,
 				layoutVersion: loaded.document.layoutVersion,
 				layout: loaded.layout,
+				upload: draftUpload(loaded.document),
 				signers: loaded.signers.map((signer) => ({
 					id: signer.id,
 					name: signer.name,
@@ -129,7 +174,10 @@ export const reissueInviteFn = createServerFn({ method: "POST" })
 				origin: getRequestUrl().origin,
 			});
 			await publishOutboxQuietly(reissued.documentId);
-			return { ok: true as const };
+			return {
+				ok: true as const,
+				url: `${getRequestUrl().origin}/s/${reissued.token}`,
+			};
 		}),
 	);
 

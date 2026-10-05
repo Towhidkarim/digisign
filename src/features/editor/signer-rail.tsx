@@ -63,13 +63,13 @@ export function SignerRail({
 	dispatch: Dispatch<EditorAction>;
 }) {
 	return (
-		<aside className="flex h-full w-64 shrink-0 flex-col gap-5 overflow-auto border-r border-black/10 bg-white px-3 py-4 md:w-72">
+		<aside className="flex h-full w-64 shrink-0 flex-col gap-5 overflow-auto border-r border-border bg-card px-3 py-4 md:w-72">
 			<section className="flex flex-col gap-2">
 				<div className="flex items-center justify-between gap-2">
 					<h2 className="text-sm font-medium text-foreground">Signers</h2>
 					<button
 						type="button"
-						className="text-sm text-[var(--harbor)] underline-offset-2 hover:underline disabled:opacity-40"
+						className="text-sm font-medium text-primary underline-offset-2 hover:underline disabled:opacity-40"
 						disabled={signers.length >= limits.signersPerDocument}
 						onClick={() =>
 							dispatch({
@@ -145,8 +145,8 @@ function SignerRow({
 		<li
 			ref={setNodeRef}
 			className={cn(
-				"flex items-center gap-1 rounded-lg border bg-white px-1 py-1",
-				selected ? "border-transparent" : "border-black/10",
+				"flex items-center gap-1 rounded-lg border bg-card px-1 py-1",
+				selected ? "border-transparent" : "border-border",
 				isDragging && "opacity-40",
 			)}
 			style={{
@@ -302,7 +302,7 @@ function FieldOption({ kind }: { kind: FieldKind }) {
 			ref={setNodeRef}
 			type="button"
 			className={cn(
-				"flex w-full cursor-grab items-center gap-2.5 rounded-lg border border-black/10 bg-white px-3 py-2.5 text-left text-sm text-foreground hover:bg-black/[0.03]",
+				"flex w-full cursor-grab items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5 text-left text-sm text-foreground hover:bg-accent",
 				isDragging && "opacity-40",
 			)}
 			style={{ touchAction: "none" }}
