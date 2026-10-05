@@ -1,9 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { resolveActor } from "#/server/actor.ts";
+import { readActor, resolveActor } from "#/server/actor.ts";
 import { secretHash } from "#/server/domain/secrets.ts";
-import { putDocumentSource, readDocumentSource } from "#/server/domain/source.ts";
 import { SIGNER_COOKIE } from "#/server/domain/signing.ts";
+import {
+	putDocumentSource,
+	readDocumentSource,
+} from "#/server/domain/source.ts";
 import { isAppError } from "#/server/errors.ts";
 
 export const Route = createFileRoute("/files/documents/$id/source")({
@@ -14,7 +17,7 @@ export const Route = createFileRoute("/files/documents/$id/source")({
 					const length = request.headers.get("content-length");
 					const result = await putDocumentSource({
 						documentId: params.id,
-						ownerId: resolveActor().id,
+						ownerId: (await resolveActor(request.headers)).id,
 						body: request.body,
 						contentLength: length == null ? null : Number(length),
 					});
@@ -33,9 +36,10 @@ export const Route = createFileRoute("/files/documents/$id/source")({
 					const raw = cookieValue(request.headers.get("cookie"), SIGNER_COOKIE);
 					return await readDocumentSource({
 						documentId: params.id,
-						ownerId: resolveActor().id,
+						ownerId: (await readActor(request.headers))?.id ?? null,
 						sessionHash: raw ? await secretHash(raw) : null,
 						rangeHeader: request.headers.get("range"),
+						grant: new URL(request.url).searchParams.get("grant"),
 					});
 				} catch (error) {
 					return errorResponse(error);
@@ -61,5 +65,8 @@ function errorResponse(error: unknown): Response {
 	if (error instanceof Error && error.message.includes("over")) {
 		return Response.json({ error: error.message }, { status: 413 });
 	}
-	return Response.json({ error: "The file could not be transferred." }, { status: 500 });
+	return Response.json(
+		{ error: "The file could not be transferred." },
+		{ status: 500 },
+	);
 }

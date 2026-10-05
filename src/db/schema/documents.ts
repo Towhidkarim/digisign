@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+	check,
+	index,
+	integer,
+	sqliteTable,
+	text,
+} from "drizzle-orm/sqlite-core";
 
 const PDF_PAGES = 200;
 const PDF_SIZE_BYTES = 26_214_400;

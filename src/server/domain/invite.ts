@@ -1,23 +1,34 @@
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 
-import { canonicalJson } from "#/core/canonical-json.ts";
 import { sha256Hex } from "#/core/hash.ts";
 import { ulid } from "#/core/ulid.ts";
-import { getDb } from "#/db/index.ts";
 import { commitOrReplay, guardedBatch } from "#/db/guarded-batch.ts";
-import { documents, outbox, signers, signerTokens } from "#/db/schema/index.ts";
+import { getDb } from "#/db/index.ts";
+import { documents, signers, signerTokens } from "#/db/schema/index.ts";
 import { insertAudit, planAudit } from "#/server/domain/audit.ts";
-import { randomSecret, readSignerLastOpId, secretHash, tokenExpiry } from "#/server/domain/secrets.ts";
+import {
+	randomSecret,
+	readSignerLastOpId,
+	secretHash,
+	tokenExpiry,
+} from "#/server/domain/secrets.ts";
+import { outboxInsert } from "#/server/engine/events.ts";
 import { AppError } from "#/server/errors.ts";
-import type { Mailer, MailMessage } from "#/server/mail/mailer.ts";
-import { getMailer } from "#/server/mail/console.ts";
 
+export type InviteResult =
+	| { invited: false }
+	| { invited: true; token: string; signerId: string; outboxId: string };
+
+/**
+ * Moves the next waiting signer to `invited` and writes a new magic-link token.
+ * The mail itself is an outbox row (`send_email`) that commits in the same batch.
+ * The caller publishes it to the queue once this returns.
+ */
 export async function inviteNextSigner(input: {
 	documentId: string;
 	origin: string;
-	mailer?: Mailer;
 	now?: number;
-}): Promise<{ invited: boolean }> {
+}): Promise<InviteResult> {
 	const now = input.now ?? Date.now();
 	const db = getDb();
 	const [document] = await db
@@ -34,12 +45,14 @@ export async function inviteNextSigner(input: {
 	const next = people.find((signer) => signer.status !== "signed");
 	if (!next || next.status !== "pending") return { invited: false };
 	const blocked = people.some(
-		(signer) => signer.signingOrder < next.signingOrder && signer.status !== "signed",
+		(signer) =>
+			signer.signingOrder < next.signingOrder && signer.status !== "signed",
 	);
 	if (blocked) return { invited: false };
 	const token = randomSecret();
 	const tokenHash = await secretHash(token);
 	const opId = ulid();
+	const outboxId = ulid();
 	const audit = await planAudit({
 		documentId: input.documentId,
 		type: "signer.invited",
@@ -82,29 +95,39 @@ export async function inviteNextSigner(input: {
 						createdAt: now,
 					}),
 					insertAudit(audit),
+					outboxInsert({
+						id: outboxId,
+						type: "send_email",
+						documentId: input.documentId,
+						payload: {
+							template: "invite",
+							to: next.email,
+							name: next.name,
+							title: document.title,
+							signerId: next.id,
+							token,
+							origin: input.origin,
+						},
+						now,
+					}),
 				],
 			}),
 	});
 	if (!result.ok) return { invited: false };
-	const mailer = input.mailer ?? getMailer();
-	await mailer.send(
-		inviteMessage({
-			to: next.email,
-			name: next.name,
-			title: document.title,
-			url: `${input.origin}/s/${token}`,
-		}),
-	);
-	return { invited: true };
+	return { invited: true, token, signerId: next.id, outboxId };
 }
 
-export async function reissueInvite(input: {
-	ownerId: string;
+/**
+ * Replaces the magic link of the signer who is currently invited.
+ * The old token stops working. Used for "send link again" (owner) and the reminder (system).
+ */
+export async function reissueSignerLink(input: {
 	signerId: string;
 	origin: string;
-	mailer?: Mailer;
+	template: "invite" | "reminder";
+	ownerId?: string;
 	now?: number;
-}): Promise<{ ok: true }> {
+}): Promise<{ token: string; outboxId: string }> {
 	const now = input.now ?? Date.now();
 	const db = getDb();
 	const [signer] = await db
@@ -118,23 +141,36 @@ export async function reissueInvite(input: {
 	const [document] = await db
 		.select()
 		.from(documents)
-		.where(and(eq(documents.id, signer.documentId), eq(documents.ownerId, input.ownerId)))
+		.where(
+			input.ownerId
+				? and(
+						eq(documents.id, signer.documentId),
+						eq(documents.ownerId, input.ownerId),
+					)
+				: eq(documents.id, signer.documentId),
+		)
 		.limit(1);
 	if (!document) throw new AppError(404, "This document was not found.");
+	if (document.status !== "in_progress") {
+		throw new AppError(409, "That signer is not waiting on a link.");
+	}
 	const token = randomSecret();
 	const tokenHash = await secretHash(token);
 	const opId = ulid();
+	const outboxId = ulid();
+	const byOwner = input.ownerId != null;
 	const audit = await planAudit({
 		documentId: document.id,
 		type: "signer.invited",
-		actorType: "owner",
-		actorId: input.ownerId,
+		actorType: byOwner ? "owner" : "system",
+		actorId: input.ownerId ?? signer.id,
 		occurredAt: now,
 		payload: {
 			signerId: signer.id,
 			order: signer.signingOrder,
 			emailSha256: await sha256Hex(signer.email),
 			reissue: true,
+			reminder: input.template === "reminder",
 		},
 	});
 	const result = await commitOrReplay({
@@ -162,7 +198,10 @@ export async function reissueInvite(input: {
 						.update(signerTokens)
 						.set({ revokedAt: now })
 						.where(
-							and(eq(signerTokens.signerId, signer.id), isNull(signerTokens.revokedAt)),
+							and(
+								eq(signerTokens.signerId, signer.id),
+								isNull(signerTokens.revokedAt),
+							),
 						),
 					db.insert(signerTokens).values({
 						tokenHash,
@@ -171,16 +210,20 @@ export async function reissueInvite(input: {
 						createdAt: now,
 					}),
 					insertAudit(audit),
-					db.insert(outbox).values({
-						id: ulid(),
-						topic: "document",
+					outboxInsert({
+						id: outboxId,
 						type: "send_email",
 						documentId: document.id,
-						payloadJson: canonicalJson({ signerId: signer.id, reissue: true }),
-						status: "pending",
-						attempts: 0,
-						availableAt: now,
-						createdAt: now,
+						payload: {
+							template: input.template,
+							to: signer.email,
+							name: signer.name,
+							title: document.title,
+							signerId: signer.id,
+							token,
+							origin: input.origin,
+						},
+						now,
 					}),
 				],
 			}),
@@ -188,37 +231,20 @@ export async function reissueInvite(input: {
 	if (!result.ok) {
 		throw new AppError(409, "This document was updated. Reload and try again.");
 	}
-	const mailer = input.mailer ?? getMailer();
-	await mailer.send(
-		inviteMessage({
-			to: signer.email,
-			name: signer.name,
-			title: document.title,
-			url: `${input.origin}/s/${token}`,
-		}),
-	);
-	return { ok: true };
+	return { token, outboxId };
 }
 
-function inviteMessage(input: {
-	to: string;
-	name: string;
-	title: string;
-	url: string;
-}): MailMessage {
-	const name = input.name || "Signer";
-	return {
-		to: input.to,
-		subject: `Please sign ${input.title}`,
-		text: `${name}, please sign "${input.title}".\n\nSigner: ${name}\nDocument: ${input.title}\n\n${input.url}`,
-		html: `<p>${escapeHtml(name)}, please sign <strong>${escapeHtml(input.title)}</strong>.</p><p><a href="${escapeHtml(input.url)}">${escapeHtml(input.url)}</a></p>`,
-	};
-}
-
-function escapeHtml(value: string): string {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;");
+export async function reissueInvite(input: {
+	ownerId: string;
+	signerId: string;
+	origin: string;
+	now?: number;
+}): Promise<{ ok: true; documentId: string }> {
+	const [signer] = await getDb()
+		.select({ documentId: signers.documentId })
+		.from(signers)
+		.where(eq(signers.id, input.signerId))
+		.limit(1);
+	await reissueSignerLink({ ...input, template: "invite" });
+	return { ok: true, documentId: signer?.documentId ?? "" };
 }

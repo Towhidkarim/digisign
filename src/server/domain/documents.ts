@@ -3,18 +3,18 @@ import { z } from "zod";
 
 import { canonicalJson } from "#/core/canonical-json.ts";
 import {
+	type FieldInput,
 	fieldInputSchema,
+	type SaveLayoutInput,
 	saveLayoutInputSchema,
 	ulidSchema,
 	uploadInitSchema,
-	type FieldInput,
-	type SaveLayoutInput,
 } from "#/core/contracts/index.ts";
 import { sha256Hex } from "#/core/hash.ts";
 import { limits } from "#/core/limits.ts";
 import { ulid } from "#/core/ulid.ts";
-import { getDb } from "#/db/index.ts";
 import { commitOrReplay, guardedBatch } from "#/db/guarded-batch.ts";
+import { getDb } from "#/db/index.ts";
 import { documents, outbox, signers } from "#/db/schema/index.ts";
 import { insertAudit, planAudit } from "#/server/domain/audit.ts";
 import { publishBlocker } from "#/server/domain/publish-rules.ts";
@@ -111,7 +111,11 @@ export async function getDraft(documentId: string, ownerId: string) {
 	return {
 		document,
 		signers: rows,
-		layout: readLayout(document.id, document.layoutJson, document.layoutVersion),
+		layout: readLayout(
+			document.id,
+			document.layoutJson,
+			document.layoutVersion,
+		),
 	};
 }
 
@@ -179,7 +183,14 @@ export async function saveSigners(input: {
 		run: () =>
 			guardedBatch({
 				cas: [
-					bumpDraft(input.documentId, input.ownerId, input.layoutVersion, opId, now, null),
+					bumpDraft(
+						input.documentId,
+						input.ownerId,
+						input.layoutVersion,
+						opId,
+						now,
+						null,
+					),
 				],
 				effects: signerWrites(input.documentId, input.signers),
 			}),
@@ -200,7 +211,11 @@ export async function saveLayout(input: {
 	if (current.layoutVersion !== input.layout.layoutVersion) {
 		throw new AppError(409, "This document was updated. Reload and try again.");
 	}
-	const stored = readLayout(current.id, current.layoutJson, current.layoutVersion);
+	const stored = readLayout(
+		current.id,
+		current.layoutJson,
+		current.layoutVersion,
+	);
 	if (sameFields(stored.fields, input.layout.fields)) {
 		return { layoutVersion: current.layoutVersion };
 	}
@@ -253,7 +268,11 @@ export async function savePreparation(input: {
 		.from(signers)
 		.where(eq(signers.documentId, input.documentId))
 		.orderBy(asc(signers.signingOrder));
-	const storedLayout = readLayout(current.id, current.layoutJson, current.layoutVersion);
+	const storedLayout = readLayout(
+		current.id,
+		current.layoutJson,
+		current.layoutVersion,
+	);
 	if (
 		sameSigners(storedSigners, input.signers) &&
 		sameFields(storedLayout.fields, input.fields)
@@ -274,10 +293,17 @@ export async function savePreparation(input: {
 		run: () =>
 			guardedBatch({
 				cas: [
-					bumpDraft(input.documentId, input.ownerId, input.layoutVersion, opId, now, {
-						layoutJson,
-						layoutSha256,
-					}),
+					bumpDraft(
+						input.documentId,
+						input.ownerId,
+						input.layoutVersion,
+						opId,
+						now,
+						{
+							layoutJson,
+							layoutSha256,
+						},
+					),
 				],
 				effects: signerWrites(input.documentId, input.signers),
 			}),
@@ -291,6 +317,8 @@ export async function savePreparation(input: {
 export async function publish(input: {
 	ownerId: string;
 	documentId: string;
+	/** Public origin for the invite link. The queue handler has no request to read it from. */
+	origin?: string;
 	now?: number;
 }): Promise<{ documentId: string; status: "in_progress" }> {
 	const now = input.now ?? Date.now();
@@ -300,7 +328,11 @@ export async function publish(input: {
 		.from(signers)
 		.where(eq(signers.documentId, input.documentId))
 		.orderBy(asc(signers.signingOrder));
-	const layout = readLayout(current.id, current.layoutJson, current.layoutVersion);
+	const layout = readLayout(
+		current.id,
+		current.layoutJson,
+		current.layoutVersion,
+	);
 	const blocker = publishBlocker({
 		uploadStatus: current.uploadStatus,
 		pageCount: current.pageCount,
@@ -309,7 +341,8 @@ export async function publish(input: {
 		fields: layout.fields,
 	});
 	if (blocker) throw new AppError(422, blocker);
-	const layoutSha = current.layoutSha256 ?? (await sha256Hex(canonicalJson(layout)));
+	const layoutSha =
+		current.layoutSha256 ?? (await sha256Hex(canonicalJson(layout)));
 	const opId = ulid();
 	const audit = await planAudit({
 		documentId: input.documentId,
@@ -357,7 +390,10 @@ export async function publish(input: {
 							topic: "document",
 							type: "dispatch_next",
 							documentId: input.documentId,
-							payloadJson: canonicalJson({ documentId: input.documentId }),
+							payloadJson: canonicalJson({
+								documentId: input.documentId,
+								origin: input.origin,
+							}),
 							status: "pending",
 							attempts: 0,
 							availableAt: now,
@@ -381,11 +417,19 @@ export async function voidDocument(input: {
 	const [current] = await getDb()
 		.select()
 		.from(documents)
-		.where(and(eq(documents.id, input.documentId), eq(documents.ownerId, input.ownerId)))
+		.where(
+			and(
+				eq(documents.id, input.documentId),
+				eq(documents.ownerId, input.ownerId),
+			),
+		)
 		.limit(1);
 	if (!current) throw new AppError(404, "This document was not found.");
 	if (current.status !== "in_progress") {
-		throw new AppError(409, "Only a document that is out for signature can be voided.");
+		throw new AppError(
+			409,
+			"Only a document that is out for signature can be voided.",
+		);
 	}
 	const opId = ulid();
 	const audit = await planAudit({
@@ -559,12 +603,20 @@ function readLayout(
 	return parsed.data;
 }
 
-function sameFields(left: readonly FieldInput[], right: readonly FieldInput[]): boolean {
+function sameFields(
+	left: readonly FieldInput[],
+	right: readonly FieldInput[],
+): boolean {
 	return canonicalJson(left) === canonicalJson(right);
 }
 
 function sameSigners(
-	stored: readonly { id: string; name: string; email: string; signingOrder: number }[],
+	stored: readonly {
+		id: string;
+		name: string;
+		email: string;
+		signingOrder: number;
+	}[],
 	incoming: readonly SignerDraft[],
 ): boolean {
 	if (stored.length !== incoming.length) return false;

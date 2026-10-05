@@ -3,10 +3,20 @@ import { and, eq, gt, sql } from "drizzle-orm";
 
 import { limits } from "#/core/limits.ts";
 import { ulid } from "#/core/ulid.ts";
+import {
+	commitOrReplay,
+	guardedBatch,
+	type Statement,
+} from "#/db/guarded-batch.ts";
 import { getDb } from "#/db/index.ts";
-import { commitOrReplay, guardedBatch, type Statement } from "#/db/guarded-batch.ts";
-import { blobIntents, documents, signerSessions, signers } from "#/db/schema/index.ts";
+import {
+	blobIntents,
+	documents,
+	signerSessions,
+	signers,
+} from "#/db/schema/index.ts";
 import { insertAudit, planAudit } from "#/server/domain/audit.ts";
+import { checkReadGrant } from "#/server/domain/grants.ts";
 import { readLastOpId } from "#/server/domain/secrets.ts";
 import { AppError } from "#/server/errors.ts";
 
@@ -31,14 +41,22 @@ export async function putDocumentSource(input: {
 	const [document] = await getDb()
 		.select()
 		.from(documents)
-		.where(and(eq(documents.id, input.documentId), eq(documents.ownerId, input.ownerId)))
+		.where(
+			and(
+				eq(documents.id, input.documentId),
+				eq(documents.ownerId, input.ownerId),
+			),
+		)
 		.limit(1);
 	if (!document) throw new AppError(404, "This document was not found.");
 	if (document.status !== "draft") {
 		throw new AppError(409, "This document can no longer be edited.");
 	}
 	if (!document.sourceSha256 || document.sourceSize == null) {
-		throw new AppError(422, "Record the file details before uploading the PDF.");
+		throw new AppError(
+			422,
+			"Record the file details before uploading the PDF.",
+		);
 	}
 	const key = `docs/${document.id}/${document.sourceSha256}.pdf`;
 	if (
@@ -68,10 +86,16 @@ export async function putDocumentSource(input: {
 		.values({ r2Key: key, documentId: document.id, createdAt: now })
 		.onConflictDoNothing();
 	lastPutChecksum = { key, sha256: document.sourceSha256 };
-	const stored = await env.STORAGE.put(key, input.body, {
-		sha256: document.sourceSha256,
-		httpMetadata: { contentType: "application/pdf" },
-	});
+	let stored: R2Object | null = null;
+	try {
+		stored = await env.STORAGE.put(key, input.body, {
+			sha256: document.sourceSha256,
+			httpMetadata: { contentType: "application/pdf" },
+		});
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		if (!message.includes("checksum")) throw error;
+	}
 	if (!stored) {
 		await markUpload(
 			document.id,
@@ -84,11 +108,16 @@ export async function putDocumentSource(input: {
 		);
 		return {
 			uploadStatus: "rejected",
-			error: "The stored file did not match the checksum recorded for this PDF.",
+			error:
+				"The stored file did not match the checksum recorded for this PDF.",
 		};
 	}
-	const head = await env.STORAGE.get(key, { range: { offset: 0, length: 1024 } });
-	const bytes = head ? new Uint8Array(await head.arrayBuffer()) : new Uint8Array();
+	const head = await env.STORAGE.get(key, {
+		range: { offset: 0, length: 1024 },
+	});
+	const bytes = head
+		? new Uint8Array(await head.arrayBuffer())
+		: new Uint8Array();
 	if (!pdfHeader(bytes)) {
 		await env.STORAGE.delete(key);
 		await markUpload(
@@ -119,17 +148,27 @@ export async function readDocumentSource(input: {
 	ownerId: string | null;
 	sessionHash: string | null;
 	rangeHeader: string | null;
+	grant?: string | null;
 }): Promise<Response> {
 	const [document] = await getDb()
 		.select()
 		.from(documents)
 		.where(eq(documents.id, input.documentId))
 		.limit(1);
-	if (!document?.sourceR2Key || !document.sourceSha256 || document.sourceSize == null) {
+	if (
+		!document?.sourceR2Key ||
+		!document.sourceSha256 ||
+		document.sourceSize == null
+	) {
 		return new Response("This PDF is not available.", { status: 404 });
 	}
-	const allowed = await canReadSource(document.ownerId, document.id, input);
-	if (!allowed) return new Response("This PDF is not available.", { status: 404 });
+	const granted =
+		document.status === "completed" &&
+		(await checkReadGrant(document.id, input.grant ?? null, Date.now()));
+	const allowed =
+		granted || (await canReadSource(document.ownerId, document.id, input));
+	if (!allowed)
+		return new Response("This PDF is not available.", { status: 404 });
 	const range = parseRange(input.rangeHeader, document.sourceSize);
 	if (range === "invalid") {
 		return new Response(null, {
@@ -139,9 +178,12 @@ export async function readDocumentSource(input: {
 	}
 	const object = await env.STORAGE.get(
 		document.sourceR2Key,
-		range ? { range: { offset: range.offset, length: range.length } } : undefined,
+		range
+			? { range: { offset: range.offset, length: range.length } }
+			: undefined,
 	);
-	if (!object) return new Response("This PDF is not available.", { status: 404 });
+	if (!object)
+		return new Response("This PDF is not available.", { status: 404 });
 	const headers = new Headers({
 		"content-type": "application/pdf",
 		etag: document.sourceSha256,
@@ -150,7 +192,10 @@ export async function readDocumentSource(input: {
 	});
 	if (range) {
 		const end = range.offset + range.length - 1;
-		headers.set("content-range", `bytes ${range.offset}-${end}/${document.sourceSize}`);
+		headers.set(
+			"content-range",
+			`bytes ${range.offset}-${end}/${document.sourceSize}`,
+		);
 		headers.set("content-length", String(range.length));
 		return new Response(object.body, { status: 206, headers });
 	}
@@ -258,7 +303,8 @@ function parseRange(
 		return { offset: size - length, length };
 	}
 	const offset = Number(startText);
-	if (!Number.isInteger(offset) || offset < 0 || offset >= size) return "invalid";
+	if (!Number.isInteger(offset) || offset < 0 || offset >= size)
+		return "invalid";
 	const end = endText === "" ? size - 1 : Number(endText);
 	if (!Number.isInteger(end) || end < offset) return "invalid";
 	const length = Math.min(end, size - 1) - offset + 1;

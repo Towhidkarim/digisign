@@ -32,7 +32,9 @@ export async function guardedBatch(input: {
 	for (const statement of input.cas) {
 		statements.push(statement);
 		// changes() has to be its own statement. A query builder cannot see the previous row count.
-		statements.push(db.run(sql`INSERT INTO _assert (ok) SELECT changes()`) as Statement);
+		statements.push(
+			db.run(sql`INSERT INTO _assert (ok) SELECT changes()`) as Statement,
+		);
 	}
 	statements.push(...effects);
 	statements.push(db.delete(assertOk));

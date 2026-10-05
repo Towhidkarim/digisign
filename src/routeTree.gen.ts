@@ -10,16 +10,26 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrepareRouteImport } from './routes/prepare'
 import { Route as SignRouteImport } from './routes/sign'
+import { Route as SignupRouteImport } from './routes/signup'
+import { Route as VerifyRouteImport } from './routes/verify'
+import { Route as DotwellKnownDigisignKeysDotjsonRouteImport } from './routes/[.]well-known/digisign-keys[.]json'
 import { Route as DevFoundationsRouteImport } from './routes/dev/foundations'
 import { Route as STokenRouteImport } from './routes/s/$token'
+import { Route as VDocumentIdRouteImport } from './routes/v.$documentId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as FilesDocumentsIdSourceRouteImport } from './routes/files/documents/$id/source'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrepareRoute = PrepareRouteImport.update({
@@ -32,6 +42,22 @@ const SignRoute = SignRouteImport.update({
   path: '/sign',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyRoute = VerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownDigisignKeysDotjsonRoute =
+  DotwellKnownDigisignKeysDotjsonRouteImport.update({
+    id: '/.well-known/digisign-keys.json',
+    path: '/.well-known/digisign-keys.json',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const DevFoundationsRoute = DevFoundationsRouteImport.update({
   id: '/dev/foundations',
   path: '/dev/foundations',
@@ -40,6 +66,11 @@ const DevFoundationsRoute = DevFoundationsRouteImport.update({
 const STokenRoute = STokenRouteImport.update({
   id: '/s/$token',
   path: '/s/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VDocumentIdRoute = VDocumentIdRouteImport.update({
+  id: '/v/$documentId',
+  path: '/v/$documentId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -55,29 +86,44 @@ const FilesDocumentsIdSourceRoute = FilesDocumentsIdSourceRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
+  '/signup': typeof SignupRoute
+  '/verify': typeof VerifyRoute
+  '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dev/foundations': typeof DevFoundationsRoute
   '/s/$token': typeof STokenRoute
+  '/v/$documentId': typeof VDocumentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
+  '/signup': typeof SignupRoute
+  '/verify': typeof VerifyRoute
+  '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dev/foundations': typeof DevFoundationsRoute
   '/s/$token': typeof STokenRoute
+  '/v/$documentId': typeof VDocumentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
+  '/signup': typeof SignupRoute
+  '/verify': typeof VerifyRoute
+  '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dev/foundations': typeof DevFoundationsRoute
   '/s/$token': typeof STokenRoute
+  '/v/$documentId': typeof VDocumentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
@@ -85,38 +131,58 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/prepare'
     | '/sign'
+    | '/signup'
+    | '/verify'
+    | '/.well-known/digisign-keys.json'
     | '/dev/foundations'
     | '/s/$token'
+    | '/v/$documentId'
     | '/api/auth/$'
     | '/files/documents/$id/source'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/prepare'
     | '/sign'
+    | '/signup'
+    | '/verify'
+    | '/.well-known/digisign-keys.json'
     | '/dev/foundations'
     | '/s/$token'
+    | '/v/$documentId'
     | '/api/auth/$'
     | '/files/documents/$id/source'
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/prepare'
     | '/sign'
+    | '/signup'
+    | '/verify'
+    | '/.well-known/digisign-keys.json'
     | '/dev/foundations'
     | '/s/$token'
+    | '/v/$documentId'
     | '/api/auth/$'
     | '/files/documents/$id/source'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   PrepareRoute: typeof PrepareRoute
   SignRoute: typeof SignRoute
+  SignupRoute: typeof SignupRoute
+  VerifyRoute: typeof VerifyRoute
+  DotwellKnownDigisignKeysDotjsonRoute: typeof DotwellKnownDigisignKeysDotjsonRoute
   DevFoundationsRoute: typeof DevFoundationsRoute
   STokenRoute: typeof STokenRoute
+  VDocumentIdRoute: typeof VDocumentIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   FilesDocumentsIdSourceRoute: typeof FilesDocumentsIdSourceRoute
 }
@@ -128,6 +194,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/prepare': {
@@ -144,6 +217,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify': {
+      id: '/verify'
+      path: '/verify'
+      fullPath: '/verify'
+      preLoaderRoute: typeof VerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/digisign-keys.json': {
+      id: '/.well-known/digisign-keys.json'
+      path: '/.well-known/digisign-keys.json'
+      fullPath: '/.well-known/digisign-keys.json'
+      preLoaderRoute: typeof DotwellKnownDigisignKeysDotjsonRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/foundations': {
       id: '/dev/foundations'
       path: '/dev/foundations'
@@ -156,6 +250,13 @@ declare module '@tanstack/react-router' {
       path: '/s/$token'
       fullPath: '/s/$token'
       preLoaderRoute: typeof STokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/v/$documentId': {
+      id: '/v/$documentId'
+      path: '/v/$documentId'
+      fullPath: '/v/$documentId'
+      preLoaderRoute: typeof VDocumentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -177,10 +278,15 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   PrepareRoute: PrepareRoute,
   SignRoute: SignRoute,
+  SignupRoute: SignupRoute,
+  VerifyRoute: VerifyRoute,
+  DotwellKnownDigisignKeysDotjsonRoute: DotwellKnownDigisignKeysDotjsonRoute,
   DevFoundationsRoute: DevFoundationsRoute,
   STokenRoute: STokenRoute,
+  VDocumentIdRoute: VDocumentIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   FilesDocumentsIdSourceRoute: FilesDocumentsIdSourceRoute,
 }

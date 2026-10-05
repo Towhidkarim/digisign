@@ -1,4 +1,9 @@
-import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+	integer,
+	primaryKey,
+	sqliteTable,
+	text,
+} from "drizzle-orm/sqlite-core";
 
 export const auditEvents = sqliteTable(
 	"audit_events",
@@ -14,7 +19,5 @@ export const auditEvents = sqliteTable(
 		prevHash: text("prev_hash").notNull(),
 		hash: text().notNull(),
 	},
-	(table) => [
-		primaryKey({ columns: [table.documentId, table.seq] }),
-	],
+	(table) => [primaryKey({ columns: [table.documentId, table.seq] })],
 );

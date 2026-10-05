@@ -40,8 +40,16 @@
 				"max_batch_timeout": 2,
 				"max_retries": 5,
 				"dead_letter_queue": "ds-dlq"
+			},
+			{
+				"queue": "ds-dlq",
+				"max_batch_size": 5,
+				"max_batch_timeout": 2
 			}
 		]
+	},
+	"vars": {
+		"APP_ORIGIN": "http://localhost:3000"
 	},
 	"triggers": {
 		"crons": ["* * * * *"]

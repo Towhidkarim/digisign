@@ -1,43 +1,41 @@
 import { env } from "cloudflare:workers";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-
+import { z } from "zod";
 import { canonicalJson } from "#/core/canonical-json.ts";
 import {
-	pageGeometrySchema,
-	saveLayoutInputSchema,
 	type FieldInput,
 	type FieldValue,
 	type PageGeometryInput,
+	pageGeometrySchema,
 	type SaveLayoutInput,
 	type SubmitSignatureInput,
+	saveLayoutInputSchema,
 } from "#/core/contracts/index.ts";
 import { sha256Hex } from "#/core/hash.ts";
 import { limits } from "#/core/limits.ts";
 import { ulid } from "#/core/ulid.ts";
-import type { SignerRecord } from "#/features/sign/session.ts";
-import { signingStateHash } from "#/features/sign/state-hash.ts";
-import { formatSignedAt } from "#/features/sign/values.ts";
-import { getDb } from "#/db/index.ts";
 import { commitOrReplay, guardedBatch } from "#/db/guarded-batch.ts";
+import { getDb } from "#/db/index.ts";
 import {
 	blobIntents,
 	documents,
 	idempotencyKeys,
-	outbox,
-	signers,
 	signerSessions,
+	signers,
 	signerTokens,
 } from "#/db/schema/index.ts";
+import type { SignerRecord } from "#/features/sign/session.ts";
+import { signingStateHash } from "#/features/sign/state-hash.ts";
+import { formatSignedAt } from "#/features/sign/values.ts";
 import { insertAudit, planAudit } from "#/server/domain/audit.ts";
 import {
 	evidenceKey,
 	manifestSigner,
-	sealEvidence,
-	signManifest,
 	type ServerManifest,
 	type StoredEvidence,
+	sealEvidence,
+	signManifest,
 } from "#/server/domain/evidence.ts";
-import { inviteNextSigner } from "#/server/domain/invite.ts";
 import {
 	nextIdle,
 	randomSecret,
@@ -45,9 +43,8 @@ import {
 	secretHash,
 	sessionWindow,
 } from "#/server/domain/secrets.ts";
+import { outboxInsert } from "#/server/engine/events.ts";
 import { AppError } from "#/server/errors.ts";
-import type { Mailer } from "#/server/mail/mailer.ts";
-import { z } from "zod";
 
 export const SIGNER_COOKIE = "digisign_signer";
 
@@ -95,9 +92,18 @@ export async function exchangeSignerToken(input: {
 		.where(eq(signers.id, tokenRow.signerId))
 		.limit(1);
 	const [document] = signer
-		? await db.select().from(documents).where(eq(documents.id, signer.documentId)).limit(1)
+		? await db
+				.select()
+				.from(documents)
+				.where(eq(documents.id, signer.documentId))
+				.limit(1)
 		: [];
-	if (!signer || signer.status !== "invited" || !document || document.status !== "in_progress") {
+	if (
+		!signer ||
+		signer.status !== "invited" ||
+		!document ||
+		document.status !== "in_progress"
+	) {
 		throw new AppError(401, "This link is no longer valid.");
 	}
 	const sessionId = randomSecret();
@@ -131,7 +137,6 @@ export async function submitSignature(input: {
 	ip: string;
 	userAgent: string;
 	origin: string;
-	mailer?: Mailer;
 	now?: number;
 }): Promise<{ status: "signed" | "completed" }> {
 	const now = input.now ?? Date.now();
@@ -142,9 +147,16 @@ export async function submitSignature(input: {
 	const requestSha256 = await sha256Hex(encoded);
 	const loaded = await openSession(input.sessionId, now);
 	const actorKey = `signer:${loaded.signer.id}`;
-	const replay = await replayIdempotency(actorKey, input.body.idempotencyKey, requestSha256);
+	const replay = await replayIdempotency(
+		actorKey,
+		input.body.idempotencyKey,
+		requestSha256,
+	);
 	if (replay) return replay;
-	if (loaded.document.status !== "in_progress" || loaded.signer.status !== "invited") {
+	if (
+		loaded.document.status !== "in_progress" ||
+		loaded.signer.status !== "invited"
+	) {
 		throw new AppError(409, "This document is not waiting for your signature.");
 	}
 	const people = await getDb()
@@ -152,13 +164,25 @@ export async function submitSignature(input: {
 		.from(signers)
 		.where(eq(signers.documentId, loaded.document.id))
 		.orderBy(asc(signers.signingOrder));
-	const layout = readLayout(loaded.document.id, loaded.document.layoutJson, loaded.document.layoutVersion);
+	const layout = readLayout(
+		loaded.document.id,
+		loaded.document.layoutJson,
+		loaded.document.layoutVersion,
+	);
 	const geometry = readGeometry(loaded.document.geometryJson);
-	const mine = layout.fields.filter((field) => field.signerId === loaded.signer.id);
-	if (mine.some((field) => field.required && !answerReady(field, input.body.values))) {
+	const mine = layout.fields.filter(
+		(field) => field.signerId === loaded.signer.id,
+	);
+	if (
+		mine.some(
+			(field) => field.required && !answerReady(field, input.body.values),
+		)
+	) {
 		throw new AppError(422, "Complete the required fields first.");
 	}
-	const prior = people.filter((person) => person.status === "signed" && person.evidenceSha256);
+	const prior = people.filter(
+		(person) => person.status === "signed" && person.evidenceSha256,
+	);
 	const stateHash = await signingStateHash({
 		sourceSha256: loaded.document.sourceSha256 ?? "",
 		geometry,
@@ -166,9 +190,17 @@ export async function submitSignature(input: {
 		priorEvidenceSha256: prior.map((person) => person.evidenceSha256 ?? ""),
 	});
 	if (stateHash !== input.body.stateHash) {
-		throw new AppError(409, "This document changed. Reload the page and sign it again.");
+		throw new AppError(
+			409,
+			"This document changed. Reload the page and sign it again.",
+		);
 	}
-	const values = completeValues(mine, input.body.values, loaded.signer.name, now);
+	const values = completeValues(
+		mine,
+		input.body.values,
+		loaded.signer.name,
+		now,
+	);
 	const sealed = await sealEvidence({
 		documentId: loaded.document.id,
 		signerId: loaded.signer.id,
@@ -231,7 +263,9 @@ export async function submitSignature(input: {
 			prev: { seq: signedAudit.seq, hash: signedAudit.hash },
 		});
 	}
-	const response = { status: last ? ("completed" as const) : ("signed" as const) };
+	const response = {
+		status: last ? ("completed" as const) : ("signed" as const),
+	};
 	const db = getDb();
 	const result = await commitOrReplay({
 		opId,
@@ -289,31 +323,21 @@ export async function submitSignature(input: {
 				effects: [
 					insertAudit(signedAudit),
 					...(completedAudit ? [insertAudit(completedAudit)] : []),
-					db.insert(outbox).values({
-						id: ulid(),
-						topic: "document",
+					outboxInsert({
 						type: last ? "anchor_manifest" : "dispatch_next",
 						documentId: loaded.document.id,
-						payloadJson: canonicalJson(
-							last ? { manifestSha256: manifest?.sha256 } : { documentId: loaded.document.id },
-						),
-						status: "pending",
-						attempts: 0,
-						availableAt: now,
-						createdAt: now,
+						payload: last
+							? { manifestSha256: manifest?.sha256 }
+							: { documentId: loaded.document.id, origin: input.origin },
+						now,
 					}),
 					...(last
 						? [
-								db.insert(outbox).values({
-									id: ulid(),
-									topic: "document",
+								outboxInsert({
 									type: "notify_parties",
 									documentId: loaded.document.id,
-									payloadJson: canonicalJson({ status: "completed" }),
-									status: "pending",
-									attempts: 0,
-									availableAt: now,
-									createdAt: now,
+									payload: { status: "completed", origin: input.origin },
+									now,
 								}),
 							]
 						: []),
@@ -328,15 +352,10 @@ export async function submitSignature(input: {
 			}),
 	});
 	if (!result.ok) {
-		throw new AppError(409, "This document changed. Reload the page and sign it again.");
-	}
-	if (!last) {
-		await inviteNextSigner({
-			documentId: loaded.document.id,
-			origin: input.origin,
-			mailer: input.mailer,
-			now,
-		});
+		throw new AppError(
+			409,
+			"This document changed. Reload the page and sign it again.",
+		);
 	}
 	return response;
 }
@@ -344,13 +363,17 @@ export async function submitSignature(input: {
 export async function declineSignature(input: {
 	sessionId: string;
 	reason: string;
+	origin?: string;
 	now?: number;
 }): Promise<{ status: "declined" }> {
 	const now = input.now ?? Date.now();
 	const reason = input.reason.trim();
 	if (!reason) throw new AppError(422, "Say why you are declining.");
 	const loaded = await openSession(input.sessionId, now);
-	if (loaded.document.status !== "in_progress" || loaded.signer.status !== "invited") {
+	if (
+		loaded.document.status !== "in_progress" ||
+		loaded.signer.status !== "invited"
+	) {
 		throw new AppError(409, "This document is not waiting for your signature.");
 	}
 	const opId = ulid();
@@ -415,22 +438,20 @@ export async function declineSignature(input: {
 				effects: [
 					insertAudit(signerAudit),
 					insertAudit(documentAudit),
-					db.insert(outbox).values({
-						id: ulid(),
-						topic: "document",
+					outboxInsert({
 						type: "notify_parties",
 						documentId: loaded.document.id,
-						payloadJson: canonicalJson({ status: "declined" }),
-						status: "pending",
-						attempts: 0,
-						availableAt: now,
-						createdAt: now,
+						payload: { status: "declined", origin: input.origin },
+						now,
 					}),
 				],
 			}),
 	});
 	if (!result.ok) {
-		throw new AppError(409, "This document changed. Reload the page and sign it again.");
+		throw new AppError(
+			409,
+			"This document changed. Reload the page and sign it again.",
+		);
 	}
 	return { status: "declined" };
 }
@@ -450,14 +471,20 @@ async function openSession(sessionId: string, now: number) {
 		.update(signerSessions)
 		.set({ idleExpiresAt: nextIdle(now, session.expiresAt) })
 		.where(eq(signerSessions.sessionHash, sessionHash));
-	const [signer] = await db.select().from(signers).where(eq(signers.id, session.signerId)).limit(1);
-	if (!signer) throw new AppError(401, "Open your invite link again to keep signing.");
+	const [signer] = await db
+		.select()
+		.from(signers)
+		.where(eq(signers.id, session.signerId))
+		.limit(1);
+	if (!signer)
+		throw new AppError(401, "Open your invite link again to keep signing.");
 	const [document] = await db
 		.select()
 		.from(documents)
 		.where(eq(documents.id, signer.documentId))
 		.limit(1);
-	if (!document) throw new AppError(401, "Open your invite link again to keep signing.");
+	if (!document)
+		throw new AppError(401, "Open your invite link again to keep signing.");
 	return { signer, document };
 }
 
@@ -506,7 +533,11 @@ async function markViewed(
 				effects: [insertAudit(audit)],
 			}),
 	});
-	const [fresh] = await db.select().from(signers).where(eq(signers.id, signer.id)).limit(1);
+	const [fresh] = await db
+		.select()
+		.from(signers)
+		.where(eq(signers.id, signer.id))
+		.limit(1);
 	return fresh ?? signer;
 }
 
@@ -520,7 +551,11 @@ async function buildView(
 		.from(signers)
 		.where(eq(signers.documentId, document.id))
 		.orderBy(asc(signers.signingOrder));
-	const layout = readLayout(document.id, document.layoutJson, document.layoutVersion);
+	const layout = readLayout(
+		document.id,
+		document.layoutJson,
+		document.layoutVersion,
+	);
 	const geometry = readGeometry(document.geometryJson);
 	const records: SignerRecord[] = [];
 	for (const person of people) {
@@ -554,7 +589,10 @@ async function buildView(
 	if (status === "signing" && signer.status !== "invited") {
 		throw new AppError(409, "This document is not waiting for your signature.");
 	}
-	const signerIndex = Math.max(0, people.findIndex((person) => person.id === signer.id));
+	const signerIndex = Math.max(
+		0,
+		people.findIndex((person) => person.id === signer.id),
+	);
 	return {
 		status,
 		declineReason: signer.declineReason,
@@ -568,7 +606,10 @@ async function buildView(
 		signerIndex,
 		signerCount: people.length,
 		fields: layout.fields.filter((field) => field.signerId === signer.id),
-		records: status === "signing" ? records.filter((record) => record.signerId !== signer.id) : records,
+		records:
+			status === "signing"
+				? records.filter((record) => record.signerId !== signer.id)
+				: records,
 		stateHash,
 		upload: {
 			documentId: document.id,
@@ -618,8 +659,12 @@ async function buildCompletedManifest(input: {
 			sha256: input.document.sourceSha256 ?? "",
 			size: input.document.sourceSize ?? 0,
 		},
-		geometrySha256: input.document.geometrySha256 ?? (await sha256Hex(canonicalJson(input.geometry))),
-		layoutSha256: input.document.layoutSha256 ?? (await sha256Hex(canonicalJson(input.layout))),
+		geometrySha256:
+			input.document.geometrySha256 ??
+			(await sha256Hex(canonicalJson(input.geometry))),
+		layoutSha256:
+			input.document.layoutSha256 ??
+			(await sha256Hex(canonicalJson(input.layout))),
 		geometry: input.geometry,
 		layout: input.layout,
 		signers: manifestSigners,
@@ -645,18 +690,26 @@ async function replayIdempotency(
 	const [row] = await getDb()
 		.select()
 		.from(idempotencyKeys)
-		.where(and(eq(idempotencyKeys.actorKey, actorKey), eq(idempotencyKeys.key, key)))
+		.where(
+			and(eq(idempotencyKeys.actorKey, actorKey), eq(idempotencyKeys.key, key)),
+		)
 		.limit(1);
 	if (!row) return null;
 	if (row.requestSha256 !== requestSha256) {
-		throw new AppError(422, "This request was already sent with different details.");
+		throw new AppError(
+			422,
+			"This request was already sent with different details.",
+		);
 	}
 	return JSON.parse(row.responseJson) as { status: "signed" | "completed" };
 }
 
 function readGeometry(geometryJson: string | null): PageGeometryInput[] {
-	const parsed = geometryList.safeParse(geometryJson ? JSON.parse(geometryJson) : null);
-	if (!parsed.success) throw new AppError(409, "This document is not ready to sign.");
+	const parsed = geometryList.safeParse(
+		geometryJson ? JSON.parse(geometryJson) : null,
+	);
+	if (!parsed.success)
+		throw new AppError(409, "This document is not ready to sign.");
 	return parsed.data;
 }
 
@@ -671,11 +724,15 @@ function readLayout(
 	return parsed.data;
 }
 
-function answerReady(field: FieldInput, values: readonly FieldValue[]): boolean {
+function answerReady(
+	field: FieldInput,
+	values: readonly FieldValue[],
+): boolean {
 	if (field.kind === "date_signed" || field.kind === "full_name") return true;
 	const value = values.find((item) => item.fieldId === field.id);
 	if (!value) return false;
-	if (field.kind === "signature" || field.kind === "initials") return value.signature !== undefined;
+	if (field.kind === "signature" || field.kind === "initials")
+		return value.signature !== undefined;
 	if (field.kind === "checkbox") return value.checked === true;
 	return (value.text ?? "").trim().length > 0;
 }
@@ -688,14 +745,19 @@ function completeValues(
 ): FieldValue[] {
 	return fields.flatMap((field): FieldValue[] => {
 		const given = values.find((item) => item.fieldId === field.id);
-		if (field.kind === "date_signed") return [{ fieldId: field.id, text: formatSignedAt(signedAt) }];
-		if (field.kind === "full_name") return [{ fieldId: field.id, text: signerName || "Signer" }];
+		if (field.kind === "date_signed")
+			return [{ fieldId: field.id, text: formatSignedAt(signedAt) }];
+		if (field.kind === "full_name")
+			return [{ fieldId: field.id, text: signerName || "Signer" }];
 		if (!given) return [];
-		if (field.kind === "checkbox") return [{ fieldId: field.id, checked: given.checked === true }];
+		if (field.kind === "checkbox")
+			return [{ fieldId: field.id, checked: given.checked === true }];
 		if (field.kind === "text") {
 			const text = (given.text ?? "").trim();
 			return text ? [{ fieldId: field.id, text }] : [];
 		}
-		return given.signature ? [{ fieldId: field.id, signature: given.signature }] : [];
+		return given.signature
+			? [{ fieldId: field.id, signature: given.signature }]
+			: [];
 	});
 }

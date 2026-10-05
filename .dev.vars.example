@@ -1,0 +1,7 @@
+# Local Worker secrets. Copy to .dev.vars and fill in. .dev.vars is gitignored.
+# MANIFEST_SIGNING_KEY is a base64 PKCS8 Ed25519 private key. The key id k1 is set in code.
+MANIFEST_SIGNING_KEY=
+RESEND_API_KEY=
+MAIL_FROM=
+BETTER_AUTH_URL=http://localhost:3000
+BETTER_AUTH_SECRET=

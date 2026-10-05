@@ -16,6 +16,7 @@ import {
 	SIGNER_COOKIE,
 	submitSignature,
 } from "#/server/domain/signing.ts";
+import { publishOutboxQuietly } from "#/server/engine/outbox.ts";
 import { isAppError } from "#/server/errors.ts";
 
 const tokenSchema = z.strictObject({ token: z.string().min(20).max(200) });
@@ -38,12 +39,14 @@ export const exchangeSignerTokenFn = createServerFn({ method: "POST" })
 		}),
 	);
 
-export const getSigningContextFn = createServerFn({ method: "GET" }).handler(async () =>
-	settle(async () => {
-		const sessionId = getCookie(SIGNER_COOKIE);
-		if (!sessionId) throw new Error("Open the invite link to sign this document.");
-		return getSigningContext({ sessionId });
-	}),
+export const getSigningContextFn = createServerFn({ method: "GET" }).handler(
+	async () =>
+		settle(async () => {
+			const sessionId = getCookie(SIGNER_COOKIE);
+			if (!sessionId)
+				throw new Error("Open the invite link to sign this document.");
+			return getSigningContext({ sessionId });
+		}),
 );
 
 export const submitSignatureFn = createServerFn({ method: "POST" })
@@ -51,15 +54,18 @@ export const submitSignatureFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) =>
 		settle(async () => {
 			const sessionId = getCookie(SIGNER_COOKIE);
-			if (!sessionId) throw new Error("Open the invite link to sign this document.");
+			if (!sessionId)
+				throw new Error("Open the invite link to sign this document.");
 			const request = getRequest();
-			return submitSignature({
+			const result = await submitSignature({
 				sessionId,
 				body: data,
 				ip: getRequestIP({ xForwardedFor: true }) ?? "unknown",
 				userAgent: request.headers.get("user-agent") ?? "",
 				origin: getRequestUrl().origin,
 			});
+			await publishOutboxQuietly();
+			return result;
 		}),
 	);
 
@@ -68,12 +74,21 @@ export const declineSignatureFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) =>
 		settle(async () => {
 			const sessionId = getCookie(SIGNER_COOKIE);
-			if (!sessionId) throw new Error("Open the invite link to sign this document.");
-			return declineSignature({ sessionId, reason: data.reason });
+			if (!sessionId)
+				throw new Error("Open the invite link to sign this document.");
+			const result = await declineSignature({
+				sessionId,
+				reason: data.reason,
+				origin: getRequestUrl().origin,
+			});
+			await publishOutboxQuietly();
+			return result;
 		}),
 	);
 
-async function settle<T>(run: () => Promise<T>): Promise<T | { error: string }> {
+async function settle<T>(
+	run: () => Promise<T>,
+): Promise<T | { error: string }> {
 	try {
 		return await run();
 	} catch (error) {

@@ -4,18 +4,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 import { canonicalJson } from "#/core/canonical-json.ts";
 import type { FieldInput, PageGeometryInput } from "#/core/contracts/index.ts";
-import { sha256Hex } from "#/core/hash.ts";
 import { ptToMicro } from "#/core/coords.ts";
+import { sha256Hex } from "#/core/hash.ts";
 import { encodeStrokes, validatePackedStrokes } from "#/core/strokes-codec.ts";
 import { ulid } from "#/core/ulid.ts";
-import { getDb } from "#/db/index.ts";
 import { guardedBatch, setCommitFault } from "#/db/guarded-batch.ts";
-import {
-	documents,
-	idempotencyKeys,
-	outbox,
-} from "#/db/schema/index.ts";
-import { DEV_OWNER_ID } from "#/server/actor.ts";
+import { getDb } from "#/db/index.ts";
+import { documents, idempotencyKeys, outbox } from "#/db/schema/index.ts";
 import { insertAudit, planAudit } from "#/server/domain/audit.ts";
 import {
 	createDraft,
@@ -25,19 +20,24 @@ import {
 	saveSigners,
 	voidDocument,
 } from "#/server/domain/documents.ts";
-import { sealEvidence, signManifest, type ServerManifest } from "#/server/domain/evidence.ts";
+import {
+	type ServerManifest,
+	sealEvidence,
+	signManifest,
+} from "#/server/domain/evidence.ts";
 import { inviteNextSigner } from "#/server/domain/invite.ts";
-import { putDocumentSource, takeLastPutChecksum } from "#/server/domain/source.ts";
 import {
 	exchangeSignerToken,
 	getSigningContext,
 	submitSignature,
 } from "#/server/domain/signing.ts";
-import { verifyCanonical } from "#/server/manifest-key.ts";
+import {
+	putDocumentSource,
+	takeLastPutChecksum,
+} from "#/server/domain/source.ts";
 import { AppError } from "#/server/errors.ts";
-import { createMemoryMailer } from "#/server/mail/memory.ts";
-import guardsSql from "../../migrations/0001_guards.sql?raw";
-import signingSql from "../../migrations/0000_signing.sql?raw";
+import { verifyCanonical } from "#/server/manifest-key.ts";
+import { DEV_OWNER_ID, migrate } from "#/server/test-support.ts";
 
 const letter: PageGeometryInput = {
 	mediaBox: [0, 0, 612, 792],
@@ -45,18 +45,7 @@ const letter: PageGeometryInput = {
 	rotate: 0,
 };
 
-beforeAll(async () => {
-	const existing = await env.DB.prepare(
-		"SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'documents'",
-	).first();
-	if (existing) return;
-	for (const file of [signingSql, guardsSql]) {
-		for (const statement of file.split("--> statement-breakpoint")) {
-			const sql = statement.trim();
-			if (sql) await env.DB.prepare(sql).run();
-		}
-	}
-});
+beforeAll(migrate);
 
 describe("phase 2", () => {
 	it("R-2.1 a compare-and-set miss leaves no audit, outbox, or idempotency row", async () => {
@@ -79,26 +68,26 @@ describe("phase 2", () => {
 			],
 			effects: [
 				insertAudit(audit),
-				getDb()
-					.insert(outbox)
-					.values({
-						id: ulid(),
-						topic: "document",
-						type: "dispatch_next",
-						documentId: audit.documentId,
-						payloadJson: "{}",
-						status: "pending",
-						attempts: 0,
-						availableAt: 1,
-						createdAt: 1,
-					}),
-				getDb().insert(idempotencyKeys).values({
-					actorKey: "signer:missing",
-					key: crypto.randomUUID(),
-					requestSha256: "ab".repeat(32),
-					responseJson: "{}",
+				getDb().insert(outbox).values({
+					id: ulid(),
+					topic: "document",
+					type: "dispatch_next",
+					documentId: audit.documentId,
+					payloadJson: "{}",
+					status: "pending",
+					attempts: 0,
+					availableAt: 1,
 					createdAt: 1,
 				}),
+				getDb()
+					.insert(idempotencyKeys)
+					.values({
+						actorKey: "signer:missing",
+						key: crypto.randomUUID(),
+						requestSha256: "ab".repeat(32),
+						responseJson: "{}",
+						createdAt: 1,
+					}),
 			],
 		});
 		expect(result).toEqual({ ok: false, reason: "conflict" });
@@ -123,8 +112,12 @@ describe("phase 2", () => {
 				}),
 			),
 		);
-		expect(submits.filter((item) => item.status === "fulfilled")).toHaveLength(1);
-		expect(submits.filter((item) => item.status === "rejected")).toHaveLength(19);
+		expect(submits.filter((item) => item.status === "fulfilled")).toHaveLength(
+			1,
+		);
+		expect(submits.filter((item) => item.status === "rejected")).toHaveLength(
+			19,
+		);
 
 		const race = await readyToSign();
 		const raced = await Promise.allSettled([
@@ -204,12 +197,16 @@ describe("phase 2", () => {
 		const draftId = ulid();
 		await createDraft({ id: draftId, title: "Guards", ownerId: DEV_OWNER_ID });
 		await expect(
-			env.DB.prepare("UPDATE audit_events SET type = 'tampered' WHERE document_id = ?")
+			env.DB.prepare(
+				"UPDATE audit_events SET type = 'tampered' WHERE document_id = ?",
+			)
 				.bind(draftId)
 				.run(),
 		).rejects.toThrow(/append-only/);
 		await expect(
-			env.DB.prepare("DELETE FROM audit_events WHERE document_id = ?").bind(draftId).run(),
+			env.DB.prepare("DELETE FROM audit_events WHERE document_id = ?")
+				.bind(draftId)
+				.run(),
 		).rejects.toThrow(/append-only/);
 		await expect(
 			env.DB.prepare("UPDATE documents SET status = 'completed' WHERE id = ?")
@@ -224,7 +221,9 @@ describe("phase 2", () => {
 				.run(),
 		).rejects.toThrow(/frozen/);
 		await expect(
-			env.DB.prepare("UPDATE signers SET email = 'other@example.com' WHERE id = ?")
+			env.DB.prepare(
+				"UPDATE signers SET email = 'other@example.com' WHERE id = ?",
+			)
 				.bind(ready.signerId)
 				.run(),
 		).rejects.toThrow(/frozen/);
@@ -238,9 +237,9 @@ describe("phase 2", () => {
 	it("R-2.5 refuses to publish an incomplete document", async () => {
 		const id = ulid();
 		await createDraft({ id, title: "Incomplete", ownerId: DEV_OWNER_ID });
-		await expect(publish({ ownerId: DEV_OWNER_ID, documentId: id })).rejects.toThrow(
-			/Upload the PDF/,
-		);
+		await expect(
+			publish({ ownerId: DEV_OWNER_ID, documentId: id }),
+		).rejects.toThrow(/Upload the PDF/);
 		const signerId = ulid();
 		await saveSigners({
 			ownerId: DEV_OWNER_ID,
@@ -256,9 +255,9 @@ describe("phase 2", () => {
 				fields: [signatureField(signerId)],
 			},
 		});
-		await expect(publish({ ownerId: DEV_OWNER_ID, documentId: id })).rejects.toThrow(
-			/Upload the PDF|email/,
-		);
+		await expect(
+			publish({ ownerId: DEV_OWNER_ID, documentId: id }),
+		).rejects.toThrow(/Upload the PDF|email/);
 	});
 
 	it("R-2.6 rejects a bad header, an oversize body, and a checksum miss", async () => {
@@ -279,7 +278,7 @@ describe("phase 2", () => {
 		const tooBig = await putDocumentSource({
 			documentId: oversize.documentId,
 			ownerId: DEV_OWNER_ID,
-		body: blobOf(pdf).stream(),
+			body: blobOf(pdf).stream(),
 			contentLength: pdf.byteLength + 1,
 		});
 		expect(tooBig.uploadStatus).toBe("rejected");
@@ -352,7 +351,10 @@ describe("phase 2", () => {
 
 	it("R-2.9 stays within the CPU budget for the maximum payload", async () => {
 		const packed = encodeStrokes([
-			Array.from({ length: 8000 }, (_, index) => [index % 1000, index % 400] as const),
+			Array.from(
+				{ length: 8000 },
+				(_, index) => [index % 1000, index % 400] as const,
+			),
 		]);
 		expect(validatePackedStrokes(packed)).toBeNull();
 		const signerId = ulid();
@@ -432,10 +434,14 @@ describe("phase 2", () => {
 });
 
 async function counts() {
-	const auditCount = await env.DB.prepare("SELECT count(*) AS n FROM audit_events").first<{
+	const auditCount = await env.DB.prepare(
+		"SELECT count(*) AS n FROM audit_events",
+	).first<{
 		n: number;
 	}>();
-	const outboxCount = await env.DB.prepare("SELECT count(*) AS n FROM outbox").first<{
+	const outboxCount = await env.DB.prepare(
+		"SELECT count(*) AS n FROM outbox",
+	).first<{
 		n: number;
 	}>();
 	const idempotencyCount = await env.DB.prepare(
@@ -461,17 +467,19 @@ async function readyToSign() {
 	const field = signatureField(signerId);
 	await saveLayout({
 		ownerId: DEV_OWNER_ID,
-		layout: { documentId: uploaded.documentId, layoutVersion: 1, fields: [field] },
+		layout: {
+			documentId: uploaded.documentId,
+			layoutVersion: 1,
+			fields: [field],
+		},
 	});
 	await publish({ ownerId: DEV_OWNER_ID, documentId: uploaded.documentId });
-	const mailer = createMemoryMailer();
-	await inviteNextSigner({
+	const invited = await inviteNextSigner({
 		documentId: uploaded.documentId,
 		origin: "https://digisign.test",
-		mailer,
 	});
-	const token = mailer.messages[0]?.text.match(/\/s\/([A-Za-z0-9_-]+)/)?.[1];
-	if (!token) throw new Error("The invite was not printed.");
+	if (!invited.invited) throw new Error("The invite was not created.");
+	const token = invited.token;
 	const exchanged = await exchangeSignerToken({ token });
 	const view = await getSigningContext({ sessionId: exchanged.sessionId });
 	return {
@@ -482,7 +490,11 @@ async function readyToSign() {
 		values: [
 			{
 				fieldId: field.id,
-				signature: { kind: "typed" as const, text: "Ava", font: "script-1" as const },
+				signature: {
+					kind: "typed" as const,
+					text: "Ava",
+					font: "script-1" as const,
+				},
 			},
 		],
 	};

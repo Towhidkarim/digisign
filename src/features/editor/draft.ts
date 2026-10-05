@@ -82,11 +82,13 @@ export function hydrateDraft(): Draft {
 				typeof parsed.fileName === "string" ? parsed.fileName : "Document",
 			bytes: cachedBase64 ? base64ToBytes(cachedBase64) : null,
 			upload: upload.data,
-			signers: (signers.length > 0 ? signers : [defaultSigner()]).map((signer) => ({
-				...signer,
-				email: signer.email ?? "",
-				color: currentSignerColor(signer.color),
-			})),
+			signers: (signers.length > 0 ? signers : [defaultSigner()]).map(
+				(signer) => ({
+					...signer,
+					email: signer.email ?? "",
+					color: currentSignerColor(signer.color),
+				}),
+			),
 			layout: layout.data,
 		};
 	} catch {
@@ -186,12 +188,16 @@ export async function getSigningContext(): Promise<
 > {
 	const result = await getSigningContextFn();
 	if ("error" in result) return result;
-	const response = await fetch(`/files/documents/${result.upload.documentId}/source`);
+	const response = await fetch(
+		`/files/documents/${result.upload.documentId}/source`,
+	);
 	if (!response.ok) return { error: "The PDF could not be loaded." };
 	const bytes = new Uint8Array(await response.arrayBuffer());
 	const digest = await sha256Hex(bytes);
 	if (digest !== result.upload.sha256) {
-		return { error: "This file no longer matches the document that was prepared." };
+		return {
+			error: "This file no longer matches the document that was prepared.",
+		};
 	}
 	const signers = result.signers.map((signer, index) => ({
 		...signer,

@@ -21,7 +21,8 @@ import {
 	saveSignersInputSchema,
 	voidDocument,
 } from "#/server/domain/documents.ts";
-import { inviteNextSigner, reissueInvite } from "#/server/domain/invite.ts";
+import { reissueInvite } from "#/server/domain/invite.ts";
+import { publishOutboxQuietly } from "#/server/engine/outbox.ts";
 import { isAppError } from "#/server/errors.ts";
 
 const signerIdSchema = z.strictObject({ signerId: ulidSchema });
@@ -30,14 +31,16 @@ const documentIdSchema = z.strictObject({ documentId: ulidSchema });
 export const createDraftFn = createServerFn({ method: "POST" })
 	.validator(createDraftInputSchema)
 	.handler(async ({ data }) =>
-		settle(() => createDraft({ ...data, ownerId: resolveActor().id })),
+		settle(async () =>
+			createDraft({ ...data, ownerId: (await resolveActor()).id }),
+		),
 	);
 
 export const getDraftFn = createServerFn({ method: "GET" })
 	.validator(documentIdSchema)
 	.handler(async ({ data }) =>
 		settle(async () => {
-			const loaded = await getDraft(data.documentId, resolveActor().id);
+			const loaded = await getDraft(data.documentId, (await resolveActor()).id);
 			return {
 				id: loaded.document.id,
 				title: loaded.document.title,
@@ -60,7 +63,7 @@ export const initUploadFn = createServerFn({ method: "POST" })
 	.validator(uploadInitSchema)
 	.handler(async ({ data }) =>
 		settle(async () => {
-			await initUpload({ ownerId: resolveActor().id, upload: data });
+			await initUpload({ ownerId: (await resolveActor()).id, upload: data });
 			return { ok: true as const };
 		}),
 	);
@@ -68,19 +71,25 @@ export const initUploadFn = createServerFn({ method: "POST" })
 export const saveSignersFn = createServerFn({ method: "POST" })
 	.validator(saveSignersInputSchema)
 	.handler(async ({ data }) =>
-		settle(() => saveSigners({ ownerId: resolveActor().id, ...data })),
+		settle(async () =>
+			saveSigners({ ownerId: (await resolveActor()).id, ...data }),
+		),
 	);
 
 export const saveLayoutFn = createServerFn({ method: "POST" })
 	.validator(saveLayoutInputSchema)
 	.handler(async ({ data }) =>
-		settle(() => saveLayout({ ownerId: resolveActor().id, layout: data })),
+		settle(async () =>
+			saveLayout({ ownerId: (await resolveActor()).id, layout: data }),
+		),
 	);
 
 export const savePreparationFn = createServerFn({ method: "POST" })
 	.validator(savePreparationInputSchema)
 	.handler(async ({ data }) =>
-		settle(() => savePreparation({ ownerId: resolveActor().id, ...data })),
+		settle(async () =>
+			savePreparation({ ownerId: (await resolveActor()).id, ...data }),
+		),
 	);
 
 export const publishFn = createServerFn({ method: "POST" })
@@ -88,13 +97,11 @@ export const publishFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) =>
 		settle(async () => {
 			const published = await publish({
-				ownerId: resolveActor().id,
-				documentId: data.documentId,
-			});
-			await inviteNextSigner({
+				ownerId: (await resolveActor()).id,
 				documentId: data.documentId,
 				origin: getRequestUrl().origin,
 			});
+			await publishOutboxQuietly(data.documentId);
 			return published;
 		}),
 	);
@@ -102,22 +109,33 @@ export const publishFn = createServerFn({ method: "POST" })
 export const voidDocumentFn = createServerFn({ method: "POST" })
 	.validator(documentIdSchema)
 	.handler(async ({ data }) =>
-		settle(() => voidDocument({ ownerId: resolveActor().id, documentId: data.documentId })),
+		settle(async () => {
+			const voided = await voidDocument({
+				ownerId: (await resolveActor()).id,
+				documentId: data.documentId,
+			});
+			await publishOutboxQuietly(data.documentId);
+			return voided;
+		}),
 	);
 
 export const reissueInviteFn = createServerFn({ method: "POST" })
 	.validator(signerIdSchema)
 	.handler(async ({ data }) =>
-		settle(() =>
-			reissueInvite({
-				ownerId: resolveActor().id,
+		settle(async () => {
+			const reissued = await reissueInvite({
+				ownerId: (await resolveActor()).id,
 				signerId: data.signerId,
 				origin: getRequestUrl().origin,
-			}),
-		),
+			});
+			await publishOutboxQuietly(reissued.documentId);
+			return { ok: true as const };
+		}),
 	);
 
-async function settle<T>(run: () => Promise<T>): Promise<T | { error: string }> {
+async function settle<T>(
+	run: () => Promise<T>,
+): Promise<T | { error: string }> {
 	try {
 		return await run();
 	} catch (error) {

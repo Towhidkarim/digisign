@@ -23,6 +23,17 @@
 - R-4.3 Rate limits verified by tests; responses do not leak account existence.
 - R-4.4 Session validation and login endpoints p99 ≤ 7 ms CPU.
 
+## Decisions and results
+
+- Login is email and password for the MVP. Magic-link or other methods can follow later.
+- Rate limits are deferred (R-4.3 covers non-leaking responses only). Resend and the signer e-mail OTP step-up are deferred.
+- Auth tables live in `src/db/schema/auth.ts` and are barrel-exported. Migration `0003_auth`.
+- S-6: Better Auth's default scrypt took about 85 ms per hash in a local measurement, over the 10 ms Free budget. Hashing uses native PBKDF2-SHA256 at 100,000 iterations (the Workers maximum), in `src/server/password.ts`. Local native cost was about 50 ms wall clock. Measure real CPU in Workers observability after deploy. If it exceeds the plan limit, the options are a lower iteration count (weaker), a paid plan, or another login method.
+- `resolveActor()` reads the session and returns 401 when missing. `ownerContact()` reads the `user` table, so the creator now receives completion, decline and expiry notices.
+- Origin check on non-safe methods and security headers live in `src/server/security.ts`, applied in `src/server-entry.ts`. The CSP and HSTS apply on https only. Check a deployed build loads PDFs and fonts under the CSP.
+- Existing documents from the dev stub owner are not migrated.
+- Security review found no authorization bypass. One medium finding: unauthenticated login and sign-up run 100,000-iteration PBKDF2 with no rate limit, a CPU-abuse vector. Add rate limiting (deferred by decision) before launch.
+
 ## Exit criteria
 
 R-4.x green; external-style review of auth flows done (use the security-review workflow).

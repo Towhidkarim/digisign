@@ -12,7 +12,10 @@ export function randomSecret(): string {
 	const bytes = crypto.getRandomValues(new Uint8Array(32));
 	let binary = "";
 	for (const byte of bytes) binary += String.fromCharCode(byte);
-	return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+	return btoa(binary)
+		.replaceAll("+", "-")
+		.replaceAll("/", "_")
+		.replaceAll("=", "");
 }
 
 export async function secretHash(secret: string): Promise<string> {
@@ -46,7 +49,9 @@ export async function readLastOpId(documentId: string): Promise<string | null> {
 	return row?.lastOpId ?? null;
 }
 
-export async function readSignerLastOpId(signerId: string): Promise<string | null> {
+export async function readSignerLastOpId(
+	signerId: string,
+): Promise<string | null> {
 	const [row] = await getDb()
 		.select({ lastOpId: signers.lastOpId })
 		.from(signers)

@@ -74,7 +74,7 @@ export function SignerRail({
 						onClick={() =>
 							dispatch({
 								type: "add-signer",
-									signer: {
+								signer: {
 									id: ulid(),
 									name: `Signer ${signers.length + 1}`,
 									email: "",

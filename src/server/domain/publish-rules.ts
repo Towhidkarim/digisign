@@ -1,9 +1,9 @@
 import { z } from "zod";
 
 import {
-	pageGeometrySchema,
 	type FieldInput,
 	type PageGeometryInput,
+	pageGeometrySchema,
 } from "#/core/contracts/index.ts";
 import { footerStripMicro, ptToMicro, viewSize } from "#/core/coords.ts";
 import { limits, minFieldSizePt } from "#/core/limits.ts";
@@ -30,10 +30,17 @@ export function publishBlocker(input: {
 	const geometry = geometryList.safeParse(
 		input.geometryJson ? JSON.parse(input.geometryJson) : null,
 	);
-	if (!geometry.success || geometry.data.length !== input.pageCount || input.pageCount < 1) {
+	if (
+		!geometry.success ||
+		geometry.data.length !== input.pageCount ||
+		input.pageCount < 1
+	) {
 		return "This PDF's page geometry is not valid.";
 	}
-	if (input.signers.length < 1 || input.signers.length > limits.signersPerDocument) {
+	if (
+		input.signers.length < 1 ||
+		input.signers.length > limits.signersPerDocument
+	) {
 		return "Add between 1 and 10 signers.";
 	}
 	const signerIds = new Set<string>();

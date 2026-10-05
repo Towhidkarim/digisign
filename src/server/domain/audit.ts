@@ -45,7 +45,9 @@ export async function planAudit(input: {
 	prev?: { seq: number; hash: string } | null;
 }): Promise<AuditDraft> {
 	const prev =
-		input.prev === undefined ? await readAuditHead(input.documentId) : input.prev;
+		input.prev === undefined
+			? await readAuditHead(input.documentId)
+			: input.prev;
 	const seq = (prev?.seq ?? 0) + 1;
 	const prevHash = prev?.hash ?? (await genesisHash(input.documentId));
 	const payloadJson = canonicalJson(input.payload);

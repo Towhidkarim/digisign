@@ -11,6 +11,7 @@ import {
 
 import { Button } from "#/components/ui/button.tsx";
 import { limits } from "#/core/limits.ts";
+import { SignOutButton } from "#/features/auth/auth-form.tsx";
 import { DeskDrag } from "#/features/editor/desk-drag.tsx";
 import {
 	type Draft,
@@ -56,7 +57,9 @@ export function PrepareDesk() {
 			await initUpload({ name: file.name, bytes });
 			setSession({ ...getDraft() });
 		} catch (caught) {
-			setError(caught instanceof Error ? caught.message : pdfMessages.unreadable);
+			setError(
+				caught instanceof Error ? caught.message : pdfMessages.unreadable,
+			);
 		} finally {
 			setPhase("idle");
 		}
@@ -119,6 +122,7 @@ export function PrepareDesk() {
 					{error ? (
 						<p className="mt-4 max-w-sm text-destructive">{error}</p>
 					) : null}
+					<SignOutButton />
 				</main>
 			)}
 		</div>
@@ -234,7 +238,10 @@ function Editor({
 			if (sendingRef.current) return;
 			void enqueueSave(snapshot).then((result) => {
 				if (cancelled || sendingRef.current) return;
-				if ("error" in result && !result.error.includes("no longer be edited")) {
+				if (
+					"error" in result &&
+					!result.error.includes("no longer be edited")
+				) {
 					setNotice(result.error);
 				}
 			});
@@ -357,17 +364,26 @@ function Editor({
 								setNotice(published.error);
 								return;
 							}
-							const fresh = await loadServerDraft(current.documentId);
-							if (!("error" in fresh)) {
-								setInvited(
-									fresh.signers
-										.filter((signer) => signer.status === "invited")
-										.map((signer) => ({
-											id: signer.id,
-											name: signer.name,
-											email: signer.email,
-										})),
-								);
+							// The invite goes out through the queue, so the first signer turns
+							// "invited" a moment after publish. Look a few times before giving up.
+							for (let attempt = 0; attempt < 8; attempt += 1) {
+								const fresh = await loadServerDraft(current.documentId);
+								if (!("error" in fresh)) {
+									const waiting = fresh.signers.filter(
+										(signer) => signer.status === "invited",
+									);
+									if (waiting.length > 0) {
+										setInvited(
+											waiting.map((signer) => ({
+												id: signer.id,
+												name: signer.name,
+												email: signer.email,
+											})),
+										);
+										break;
+									}
+								}
+								await new Promise((resolve) => setTimeout(resolve, 750));
 							}
 							setNotice(
 								"Sent for signature. The invite link is printed in the server console.",

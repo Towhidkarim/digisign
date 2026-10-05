@@ -6,6 +6,8 @@ type KeyMaterial = {
 	keyId: string;
 };
 
+const KEY_ID = "k1";
+
 let cached: KeyMaterial | null = null;
 
 function algorithm(): AlgorithmIdentifier {
@@ -14,18 +16,18 @@ function algorithm(): AlgorithmIdentifier {
 
 export async function manifestKeys(): Promise<KeyMaterial> {
 	if (cached) return cached;
-	const secret = (env as { MANIFEST_SIGNING_KEY?: string }).MANIFEST_SIGNING_KEY;
+	const secret = env.MANIFEST_SIGNING_KEY;
 	if (secret) {
-		const jwk = JSON.parse(secret) as JsonWebKey & { kid?: string };
 		const privateKey = await crypto.subtle.importKey(
-			"jwk",
-			jwk,
+			"pkcs8",
+			bufferSource(base64ToBytes(secret)),
 			algorithm(),
 			true,
 			["sign"],
 		);
-		const publicJwk: JsonWebKey = { ...jwk, key_ops: ["verify"] };
+		const publicJwk = await crypto.subtle.exportKey("jwk", privateKey);
 		delete publicJwk.d;
+		publicJwk.key_ops = ["verify"];
 		const publicKey = await crypto.subtle.importKey(
 			"jwk",
 			publicJwk,
@@ -33,14 +35,18 @@ export async function manifestKeys(): Promise<KeyMaterial> {
 			true,
 			["verify"],
 		);
-		cached = { privateKey, publicKey, keyId: jwk.kid ?? "k1" };
+		cached = { privateKey, publicKey, keyId: KEY_ID };
 		return cached;
 	}
 	const pair = (await crypto.subtle.generateKey(algorithm(), true, [
 		"sign",
 		"verify",
 	])) as CryptoKeyPair;
-	cached = { privateKey: pair.privateKey, publicKey: pair.publicKey, keyId: "dev" };
+	cached = {
+		privateKey: pair.privateKey,
+		publicKey: pair.publicKey,
+		keyId: "dev",
+	};
 	return cached;
 }
 
@@ -70,7 +76,9 @@ export async function verifyCanonical(
 	);
 }
 
-export async function exportManifestPublicJwk(): Promise<JsonWebKey & { kid: string }> {
+export async function exportManifestPublicJwk(): Promise<
+	JsonWebKey & { kid: string }
+> {
 	const { publicKey, keyId } = await manifestKeys();
 	const jwk = await crypto.subtle.exportKey("jwk", publicKey);
 	return { ...jwk, kid: keyId };

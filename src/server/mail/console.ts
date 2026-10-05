@@ -1,5 +1,6 @@
 import type { Mailer, MailMessage } from "#/server/mail/mailer.ts";
 
+/** Prints each message in the process console. Used until Resend is configured. */
 export const consoleMailer: Mailer = {
 	async send(message: MailMessage) {
 		console.log(
@@ -12,15 +13,6 @@ export const consoleMailer: Mailer = {
 				"------------------------",
 			].join("\n"),
 		);
+		return { providerMessageId: null };
 	},
 };
-
-let current: Mailer = consoleMailer;
-
-export function getMailer(): Mailer {
-	return current;
-}
-
-export function setMailer(mailer: Mailer): void {
-	current = mailer;
-}

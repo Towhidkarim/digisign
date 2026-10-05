@@ -1,26 +1,31 @@
+import { env } from "cloudflare:workers";
 import handler from "@tanstack/react-start/server-entry";
 
-import { insertProbe } from "#/db/probes.ts";
-
-import type { QueueProbeMessage } from "#/server/queue-message.ts";
+import {
+	handleDeadLetterBatch,
+	handleEventBatch,
+} from "#/server/engine/consumer.ts";
+import { runSweeper } from "#/server/engine/sweeper.ts";
+import { crossSiteRejection, withSecurityHeaders } from "#/server/security.ts";
 
 export default {
-	fetch: handler.fetch,
-	async queue(batch: MessageBatch<QueueProbeMessage>) {
-		for (const message of batch.messages) {
-			const note =
-				typeof message.body?.note === "string" ? message.body.note : "";
-			await insertProbe("queue", note);
-			message.ack();
-		}
+	async fetch(request: Request, ...rest: unknown[]) {
+		const blocked = crossSiteRejection(request, env.APP_ORIGIN);
+		if (blocked) return withSecurityHeaders(blocked, request);
+		const response = await (
+			handler.fetch as (...args: unknown[]) => Promise<Response>
+		)(request, ...rest);
+		return withSecurityHeaders(response, request);
 	},
-	async scheduled(controller: ScheduledController) {
-		await insertProbe(
-			"cron",
-			JSON.stringify({
-				cron: controller.cron,
-				scheduledTime: controller.scheduledTime,
-			}),
-		);
+	async queue(batch: MessageBatch<unknown>) {
+		if (batch.queue === "ds-dlq") {
+			await handleDeadLetterBatch(batch);
+			return;
+		}
+		await handleEventBatch(batch);
+	},
+	async scheduled() {
+		const report = await runSweeper();
+		if (!report.idle) console.log("[sweeper]", JSON.stringify(report));
 	},
 };
