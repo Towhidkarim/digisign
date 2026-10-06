@@ -97,56 +97,6 @@ export function signerTone(status: string): string {
 	return statusTone("draft");
 }
 
-function countPhrase(count: number, word: string, plural = `${word}s`): string {
-	if (count === 0) return "";
-	return `${count} ${count === 1 ? word : plural}`;
-}
-
-/** One sentence of the counts that are above zero. Empty when there is nothing to say. */
-export function countSentence(documents: readonly OwnedDocument[]): string {
-	const count = (status: string) =>
-		documents.filter((document) => document.status === status).length;
-	return [
-		countPhrase(count("draft"), "draft"),
-		countPhrase(count("in_progress"), "out for signature", "out for signature"),
-		countPhrase(count("completed"), "completed", "completed"),
-		countPhrase(count("declined"), "declined", "declined"),
-		countPhrase(count("voided"), "voided", "voided"),
-		countPhrase(count("expired"), "expired", "expired"),
-	]
-		.filter((part) => part.length > 0)
-		.join(", ");
-}
-
-const STILL_OPEN = new Set(["draft", "in_progress"]);
-
-/** Unfinished documents first, then the rest. The list is already newest-first. */
-export function deskPreview(
-	documents: readonly OwnedDocument[],
-	limit: number,
-): OwnedDocument[] {
-	const open = documents.filter((document) => STILL_OPEN.has(document.status));
-	const settled = documents.filter(
-		(document) => !STILL_OPEN.has(document.status),
-	);
-	return [...open, ...settled].slice(0, limit);
-}
-
-/** Who is holding it, how far signing has got, and when it expires. */
-export function progressLine(document: OwnedDocument): string {
-	return [
-		document.waitingOn ? `Waiting on ${document.waitingOn}` : "",
-		document.signers > 0
-			? `${document.signed} of ${document.signers} signed`
-			: "",
-		document.expiresAt != null && document.status === "in_progress"
-			? `Expires ${formatUpdated(document.expiresAt)}`
-			: "",
-	]
-		.filter((part) => part.length > 0)
-		.join(". ");
-}
-
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 

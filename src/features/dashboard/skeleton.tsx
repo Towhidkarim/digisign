@@ -6,11 +6,16 @@ export function DocumentsPending() {
 		<div aria-busy="true">
 			<p className="sr-only">Loading documents</p>
 			<Skeleton className="h-9 w-40" />
-			<Skeleton className="mt-3 h-4 w-56" />
-			<div className="mt-10 overflow-hidden rounded-lg border border-border bg-card px-6">
-				<Skeleton className="my-5 h-12 w-full" />
-				<Skeleton className="my-5 h-12 w-full" />
-				<Skeleton className="my-5 h-12 w-full" />
+			<Skeleton className="mt-2 h-4 w-64" />
+			<div className="mt-8 overflow-hidden rounded-lg border border-border bg-card">
+				<div className="flex gap-2 border-b border-border px-5 py-4">
+					<Skeleton className="h-9 w-16" />
+					<Skeleton className="h-9 w-36" />
+					<Skeleton className="h-9 w-24" />
+				</div>
+				<Skeleton className="m-5 h-12 w-auto" />
+				<Skeleton className="m-5 h-12 w-auto" />
+				<Skeleton className="m-5 h-12 w-auto" />
 			</div>
 		</div>
 	);

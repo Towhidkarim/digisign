@@ -1,13 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 
-import {
-	DocumentList,
-	DocumentLoadError,
-	DocumentSheet,
-} from "#/features/dashboard/document-list.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import { DocumentLoadError } from "#/features/dashboard/document-list.tsx";
+import { DocumentsCard } from "#/features/dashboard/documents-card.tsx";
 import { EmptyDocuments } from "#/features/dashboard/empty-state.tsx";
-import { countSentence } from "#/features/dashboard/format.ts";
 import { DocumentsPending } from "#/features/dashboard/skeleton.tsx";
+import {
+	countDocuments,
+	dashboardSubtitle,
+} from "#/features/dashboard/summary.ts";
 import { listDocumentsFn } from "#/server/documents.ts";
 
 export const Route = createFileRoute("/documents/")({
@@ -19,21 +21,37 @@ export const Route = createFileRoute("/documents/")({
 
 function DocumentsIndex() {
 	const data = Route.useLoaderData();
-	const summary = Array.isArray(data) ? countSentence(data) : "";
+	const documents = Array.isArray(data) ? data : [];
+	const total = documents.length;
+	const subtitle = Array.isArray(data)
+		? total === 0
+			? "Everything you send for signature appears here."
+			: `${total} ${total === 1 ? "document" : "documents"}. ${dashboardSubtitle(countDocuments(documents), total)}`
+		: "";
 	return (
 		<>
-			<h1 className="text-[clamp(1.7rem,3vw,2.1rem)] font-semibold tracking-tight">
-				Documents
-			</h1>
-			{summary ? <p className="mt-2 text-muted-foreground">{summary}</p> : null}
+			<div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+				<div className="min-w-0">
+					<h1 className="text-title font-semibold tracking-tight">Documents</h1>
+					{subtitle ? (
+						<p className="mt-1 text-muted-foreground">{subtitle}</p>
+					) : null}
+				</div>
+				<Button asChild size="lg" className="h-11 w-full md:h-10 md:w-auto">
+					<Link to="/prepare">
+						<Plus strokeWidth={1.75} />
+						Create a document
+					</Link>
+				</Button>
+			</div>
 			{!Array.isArray(data) ? (
 				<DocumentLoadError className="mt-8" message={data.error} />
-			) : data.length === 0 ? (
-				<DocumentSheet className="py-8">
-					<EmptyDocuments className="pt-0" />
-				</DocumentSheet>
+			) : total === 0 ? (
+				<div className="mt-8 rounded-lg border border-border bg-card">
+					<EmptyDocuments action={false} />
+				</div>
 			) : (
-				<DocumentList documents={data} />
+				<DocumentsCard documents={documents} />
 			)}
 		</>
 	);

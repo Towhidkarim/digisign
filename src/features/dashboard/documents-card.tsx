@@ -25,13 +25,16 @@ const TABS: readonly { value: DocumentFilter; label: string }[] = [
 	{ value: "attention", label: "Needs attention" },
 ];
 
-const SHOWN = 6;
-
-/** Recent documents with client-side filter tabs. Search is a placeholder until it exists. */
+/**
+ * Documents with client-side filter tabs. Search is a placeholder until it exists.
+ * With a `limit` it is the dashboard's recent list and links on to all documents.
+ */
 export function DocumentsCard({
 	documents,
+	limit,
 }: {
 	documents: readonly OwnedDocument[];
+	limit?: number;
 }) {
 	const [filter, setFilter] = useState<DocumentFilter>("all");
 	const counts = countDocuments(documents);
@@ -40,7 +43,7 @@ export function DocumentsCard({
 	const matching = documents.filter((document) =>
 		matchesFilter(document, filter),
 	);
-	const shown = matching.slice(0, SHOWN);
+	const shown = limit === undefined ? matching : matching.slice(0, limit);
 
 	return (
 		<Tabs
@@ -101,14 +104,16 @@ export function DocumentsCard({
 					Showing {shown.length} of {matching.length}{" "}
 					{matching.length === 1 ? "document" : "documents"}
 				</span>
-				<Link
-					to="/documents"
-					preload="intent"
-					className="inline-flex items-center gap-1.5 text-sm font-medium text-primary no-underline hover:text-brand-hover"
-				>
-					All documents
-					<ArrowRight className="size-4" strokeWidth={1.75} />
-				</Link>
+				{limit === undefined ? null : (
+					<Link
+						to="/documents"
+						preload="intent"
+						className="inline-flex items-center gap-1.5 text-sm font-medium text-primary no-underline hover:text-brand-hover"
+					>
+						All documents
+						<ArrowRight className="size-4" strokeWidth={1.75} />
+					</Link>
+				)}
 			</div>
 		</Tabs>
 	);

@@ -62,13 +62,13 @@ function DashboardPage() {
 			{!Array.isArray(data) ? (
 				<DocumentLoadError className="mt-8" message={data.error} />
 			) : documents.length === 0 ? (
-				<div className="mt-8 rounded-lg border border-border bg-card px-6 py-8">
-					<EmptyDocuments action={false} className="pt-0" />
+				<div className="mt-8 rounded-lg border border-border bg-card">
+					<EmptyDocuments action={false} />
 				</div>
 			) : (
 				<>
 					<OverviewStrip counts={counts} />
-					<DocumentsCard documents={documents} />
+					<DocumentsCard documents={documents} limit={6} />
 				</>
 			)}
 		</AppShell>
