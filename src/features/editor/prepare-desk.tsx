@@ -63,7 +63,7 @@ import {
 } from "#/features/editor/reducer.ts";
 import { ReviewDialog } from "#/features/editor/review-dialog.tsx";
 import { SignerRail } from "#/features/editor/signer-rail.tsx";
-import { countProblems } from "#/features/editor/summary.ts";
+import { countProblems, problemList } from "#/features/editor/summary.ts";
 import {
 	type ReadingStep,
 	UploadStage,
@@ -572,6 +572,11 @@ function Editor({
 						}
 						saveState={saveState}
 						problems={countProblems(state.signers, state.fields)}
+						issues={problemList(state.signers, state.fields)}
+						onShowIssues={() => {
+							setRevealErrors(true);
+							setReviewOpen(true);
+						}}
 						sent={sent}
 						sending={sending}
 						onClose={() => void leave()}

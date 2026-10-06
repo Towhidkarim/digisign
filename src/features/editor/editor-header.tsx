@@ -8,6 +8,12 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "#/components/ui/dropdown-menu.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 
 export type SaveState = "saving" | "saved" | "error" | "";
 
@@ -17,6 +23,8 @@ export function EditorHeader({
 	saveText,
 	saveState,
 	problems,
+	issues,
+	onShowIssues,
 	sent,
 	sending,
 	onClose,
@@ -28,6 +36,10 @@ export function EditorHeader({
 	saveText: string;
 	saveState: SaveState;
 	problems: number;
+	/** What needs fixing, shown on hover and on keyboard focus of the chip. */
+	issues: readonly string[];
+	/** Clicking the chip opens the review dialog, which lists the same things. */
+	onShowIssues: () => void;
 	sent: boolean;
 	sending: boolean;
 	onClose: () => void;
@@ -73,17 +85,36 @@ export function EditorHeader({
 			<Stepper compact current={1} className="hidden lg:flex" />
 			<div className="flex items-center justify-end gap-2">
 				{problems > 0 ? (
-					<span
-						className="hidden h-7 items-center gap-1.5 rounded-full bg-warning-bg px-3 text-xs font-medium whitespace-nowrap text-warning-fg sm:inline-flex"
-						title="Signers who still need a signature or initials field"
-					>
-						<TriangleAlert
-							aria-hidden="true"
-							className="size-3.5"
-							strokeWidth={1.75}
-						/>
-						{problems} to fix
-					</span>
+					<TooltipProvider delayDuration={100}>
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									className="hidden h-7 cursor-pointer items-center gap-1.5 rounded-full bg-warning-bg px-3 text-xs font-medium whitespace-nowrap text-warning-fg outline-none hover:brightness-95 focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:inline-flex"
+									onClick={onShowIssues}
+								>
+									<TriangleAlert
+										aria-hidden="true"
+										className="size-3.5"
+										strokeWidth={1.75}
+									/>
+									{problems} to fix
+								</button>
+							</TooltipTrigger>
+							<TooltipContent
+								align="end"
+								sideOffset={8}
+								className="max-w-72 px-3 py-2 text-left text-small text-balance"
+							>
+								<p className="font-medium">To send this document:</p>
+								<ul className="mt-1 list-disc space-y-0.5 pl-4">
+									{issues.map((issue) => (
+										<li key={issue}>{issue}</li>
+									))}
+								</ul>
+							</TooltipContent>
+						</Tooltip>
+					</TooltipProvider>
 				) : null}
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
