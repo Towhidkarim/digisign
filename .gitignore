@@ -15,3 +15,8 @@ todos.json
 .dev.vars*
 !.dev.vars.example
 !.env.example
+
+# Impeccable skill installs are local. PRODUCT.md stays tracked.
+# Tools keep their own copy (Cursor, Claude, Codex, and others). Do not commit them.
+# If a tool uses a path this pattern misses, leave that copy uncommitted too.
+**/skills/impeccable/
