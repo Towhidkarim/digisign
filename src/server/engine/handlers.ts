@@ -188,6 +188,7 @@ async function sendEmail(
 		url: payload.token ? `${origin}/s/${payload.token}` : undefined,
 		verifyUrl: `${origin}/v/${envelope.documentId}`,
 		actor: payload.actor,
+		reason: payload.reason,
 	});
 	let providerMessageId: string | null = null;
 	try {
@@ -329,6 +330,10 @@ async function notifyParties(
 				title: document.title,
 				origin,
 				actor: decliner?.name,
+				// Only the sender is told why. Other signers get the notice without it.
+				...(recipient.key === "owner" && decliner?.declineReason
+					? { reason: decliner.declineReason }
+					: {}),
 			},
 			now,
 		}).onConflictDoNothing(),

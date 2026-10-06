@@ -22,6 +22,8 @@ export type EmailData = {
 	verifyUrl?: string;
 	/** Who declined, for the declined notice. */
 	actor?: string;
+	/** Why they declined. Only the document owner's notice carries it. */
+	reason?: string;
 };
 
 /** Only the invite and reminder carry a magic link. No template asks for an account. */
@@ -61,6 +63,9 @@ export function renderEmail(data: EmailData): MailMessage {
 				to: data.to,
 				subject: `${title} was declined`,
 				lead: `${data.actor?.trim() || "A signer"} declined to sign "${title}". Nobody else will be asked to sign it.`,
+				detail: data.reason?.trim()
+					? `Reason: ${data.reason.trim()}`
+					: undefined,
 			});
 		case "voided":
 			return notice({
@@ -102,10 +107,13 @@ function notice(input: {
 	lead: string;
 	url?: string | undefined;
 	action?: string;
+	detail?: string | undefined;
 }): MailMessage {
-	const text = input.url
-		? [input.lead, "", `${input.action}: ${input.url}`].join("\n")
-		: input.lead;
+	const lines = [input.lead];
+	if (input.detail) lines.push("", input.detail);
+	if (input.url) lines.push("", `${input.action}: ${input.url}`);
+	const text = lines.join("\n");
+	const detail = input.detail ? `<p>${escapeHtml(input.detail)}</p>` : "";
 	const link = input.url
 		? `<p><a href="${escapeHtml(input.url)}">${escapeHtml(input.action ?? input.url)}</a></p>`
 		: "";
@@ -113,7 +121,7 @@ function notice(input: {
 		to: input.to,
 		subject: input.subject,
 		text,
-		html: `<p>${escapeHtml(input.lead)}</p>${link}`,
+		html: `<p>${escapeHtml(input.lead)}</p>${detail}${link}`,
 	};
 }
 

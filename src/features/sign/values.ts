@@ -1,8 +1,33 @@
-const monthName = new Intl.DateTimeFormat("en", { month: "short" });
+const monthName = new Intl.DateTimeFormat("en", {
+	month: "short",
+	timeZone: "UTC",
+});
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The text a "Date signed" field gets. It is always read in UTC, so the server (which writes
+ * it) and the browser (which previews it) cannot disagree because of a time zone.
+ */
 export function formatSignedAt(signedAt: number): string {
 	const date = new Date(signedAt);
-	return `${ordinal(date.getDate())} ${monthName.format(date)}, ${date.getFullYear()}`;
+	return `${ordinal(date.getUTCDate())} ${monthName.format(date)}, ${date.getUTCFullYear()}`;
+}
+
+/**
+ * The date to preview in a "Date signed" field. `reliable` is false when the UTC day could
+ * roll over before the signing session ends, so the preview might differ from what the
+ * server writes. The page should then say "Filled in when you sign" instead of a date.
+ */
+export function signedDatePreview(
+	serverNow: number,
+	sessionMs: number,
+): { text: string; reliable: boolean } {
+	const untilMidnight = DAY_MS - (serverNow % DAY_MS);
+	return {
+		text: formatSignedAt(serverNow),
+		reliable: untilMidnight > sessionMs,
+	};
 }
 
 export function formatSignedTime(signedAt: number): string {

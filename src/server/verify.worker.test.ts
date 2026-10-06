@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
-	classify,
+	decideOutcome,
 	parseFooter,
 	recordIsGenuine,
 } from "#/features/verify/outcome.ts";
@@ -170,53 +170,27 @@ describe("verify outcomes", () => {
 			auditChain: true,
 			sourceStored: true,
 		},
-	} as unknown as Parameters<typeof classify>[0]["record"];
+	} as unknown as Parameters<typeof decideOutcome>[0] & object;
 
-	it("R-3.7 names the four outcomes", () => {
-		expect(
-			classify({
-				record: genuine,
-				embeddedManifest: true,
-				droppedSha256: "a",
-				renderedSha256: "a",
-			}),
-		).toBe("valid");
-		expect(
-			classify({
-				record: genuine,
-				embeddedManifest: true,
-				droppedSha256: "a",
-				renderedSha256: "b",
-			}),
-		).toBe("modified");
-		expect(
-			classify({
-				record: genuine,
-				embeddedManifest: false,
-				droppedSha256: "a",
-				renderedSha256: null,
-			}),
-		).toBe("no-manifest");
-		expect(
-			classify({
-				record: { found: false },
-				embeddedManifest: true,
-				droppedSha256: "a",
-				renderedSha256: "a",
-			}),
-		).toBe("invalid");
+	it("R-3.7 names the verification outcomes", () => {
+		expect(decideOutcome(genuine, { kind: "compared", matches: true })).toBe(
+			"valid",
+		);
+		expect(decideOutcome(genuine, { kind: "compared", matches: false })).toBe(
+			"modified",
+		);
+		expect(decideOutcome(genuine, { kind: "no-manifest" })).toBe(
+			"not-comparable",
+		);
+		expect(decideOutcome(genuine, { kind: "none" })).toBe("record-only");
+		expect(decideOutcome({ found: false }, { kind: "none" })).toBe("not-found");
 		const broken = {
 			...genuine,
 			checks: { ...(genuine as { checks: object }).checks, signature: false },
 		};
 		expect(
-			classify({
-				record: broken as unknown as typeof genuine,
-				embeddedManifest: true,
-				droppedSha256: "a",
-				renderedSha256: "a",
-			}),
-		).toBe("invalid");
+			decideOutcome(broken as unknown as typeof genuine, { kind: "none" }),
+		).toBe("failed-checks");
 	});
 
 	it("reads the id and origin from the footer text", () => {

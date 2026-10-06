@@ -29,8 +29,10 @@ import { unpackStrokes } from "#/features/sign/capture.ts";
 import { CaptureSheet } from "#/features/sign/capture-sheet.tsx";
 import { FittedScript } from "#/features/sign/fitted-script.tsx";
 import { buildManifest } from "#/features/sign/manifest.ts";
-import type { SigningContext } from "#/features/sign/session.ts";
-import { formatSignedAt } from "#/features/sign/values.ts";
+import type {
+	RestingContext,
+	SigningContext,
+} from "#/features/sign/session.ts";
 import {
 	installScriptFaces,
 	loadScriptFonts,
@@ -41,7 +43,9 @@ import "#/pdf/setup.ts";
 import { render } from "#/pdf/render.ts";
 
 export function SigningDesk() {
-	const [context, setContext] = useState<SigningContext | null>(null);
+	const [context, setContext] = useState<
+		SigningContext | RestingContext | null
+	>(null);
 	const [error, setError] = useState("");
 	const [ready, setReady] = useState(false);
 
@@ -77,6 +81,7 @@ export function SigningDesk() {
 			</main>
 		);
 	}
+	if (context.status === "resting") return <Resting context={context} />;
 	if (context.status === "declined") {
 		return (
 			<main className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-16">
@@ -106,12 +111,44 @@ export function SigningDesk() {
 	);
 }
 
+/** A signer who is no longer waiting. Plain for now; the signer screens restyle this. */
+function Resting({ context }: { context: RestingContext }) {
+	const { view } = context;
+	const lines: Record<RestingContext["view"]["kind"], [string, string]> = {
+		"signed-waiting": [
+			"You have signed this document",
+			view.kind === "signed-waiting" && view.nextSignerName
+				? `${view.nextSignerName} will be asked to sign next. You will get an email when everyone has signed.`
+				: "You will get an email when everyone has signed.",
+		],
+		"declined-by-you": [
+			"You declined this document",
+			view.kind === "declined-by-you" && view.reason
+				? view.reason
+				: "Signing has stopped.",
+		],
+		stopped: ["Signing stopped", "Another signer declined this document."],
+		voided: ["This document was cancelled", "The sender cancelled it."],
+		expired: ["This document has expired", "It was not finished in time."],
+	};
+	const [title, text] = lines[view.kind];
+	return (
+		<main className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-16">
+			<h1 className="text-2xl font-semibold text-primary">{title}</h1>
+			<p className="text-sm text-foreground">{text}</p>
+			<Link to="/" className="text-sm text-primary">
+				Back home
+			</Link>
+		</main>
+	);
+}
+
 function Walk({
 	context,
 	onContext,
 }: {
 	context: SigningContext;
-	onContext: (next: SigningContext) => void;
+	onContext: (next: SigningContext | RestingContext) => void;
 }) {
 	const source = getDraft().bytes;
 	const file = useMemo(() => (source ? pdfBlob(source) : null), [source]);
@@ -290,6 +327,7 @@ function Walk({
 													viewH={viewH}
 													color={context.signer.color}
 													name={context.signer.name}
+													datePreview={context.dateSigned}
 													value={answers.find(
 														(item) => item.fieldId === field.id,
 													)}
@@ -519,6 +557,7 @@ function SignerField({
 	viewH,
 	color,
 	name,
+	datePreview,
 	value,
 	focused,
 	onSignature,
@@ -530,6 +569,7 @@ function SignerField({
 	viewH: number;
 	color: string;
 	name: string;
+	datePreview: { text: string; reliable: boolean } | undefined;
 	value: FieldValue | undefined;
 	focused: boolean;
 	onSignature: () => void;
@@ -613,7 +653,7 @@ function SignerField({
 					className="flex h-full w-full items-center justify-center overflow-hidden rounded-sm border px-1 text-center text-[10px] text-muted-foreground"
 					style={chrome}
 				>
-					{formatSignedAt(Date.now())}
+					{datePreview?.reliable ? datePreview.text : "Filled in when you sign"}
 				</p>
 			) : null}
 		</div>

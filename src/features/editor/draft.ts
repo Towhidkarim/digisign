@@ -10,7 +10,10 @@ import {
 import { sha256Hex } from "#/core/hash.ts";
 import { ulid } from "#/core/ulid.ts";
 import { type EditorSigner, SIGNER_COLORS } from "#/features/editor/reducer.ts";
-import type { SigningContext } from "#/features/sign/session.ts";
+import type {
+	RestingContext,
+	SigningContext,
+} from "#/features/sign/session.ts";
 import { readUpload } from "#/pdf/load.ts";
 import {
 	createDraftFn,
@@ -247,10 +250,47 @@ export async function reissueInvite(
 }
 
 export async function getSigningContext(): Promise<
-	SigningContext | { error: string }
+	SigningContext | RestingContext | { error: string }
 > {
 	const result = await getSigningContextFn();
 	if ("error" in result) return result;
+	const resting = {
+		status: "resting" as const,
+		title: result.title,
+		you: {
+			name: result.you.name,
+			email: result.you.email,
+			order: result.you.order,
+		},
+		count: result.count,
+	};
+	switch (result.kind) {
+		case "signed-waiting":
+			return {
+				...resting,
+				view: {
+					kind: "signed-waiting",
+					signedAt: result.signedAt,
+					nextSignerName: result.nextSignerName,
+				},
+			};
+		case "declined-by-you":
+			return {
+				...resting,
+				view: {
+					kind: "declined-by-you",
+					reason: result.reason,
+					declinedAt: result.declinedAt,
+				},
+			};
+		case "stopped":
+		case "voided":
+		case "expired":
+			return { ...resting, view: { kind: result.kind } };
+		case "ready":
+		case "completed":
+			break;
+	}
 	const response = await fetch(
 		`/files/documents/${result.upload.documentId}/source`,
 	);
@@ -262,8 +302,25 @@ export async function getSigningContext(): Promise<
 			error: "This file no longer matches the document that was prepared.",
 		};
 	}
-	const signers = result.signers.map((signer, index) => ({
-		...signer,
+	// Other signers arrive as { order, name, status } only. Their ids and emails stay on the server.
+	const people = [
+		{
+			order: result.you.order,
+			id: result.you.id,
+			name: result.you.name,
+			email: result.you.email,
+		},
+		...result.others.map((other) => ({
+			order: other.order,
+			id: `signer-${other.order}`,
+			name: other.name,
+			email: "",
+		})),
+	].sort((left, right) => left.order - right.order);
+	const signers = people.map(({ id, name, email }, index) => ({
+		id,
+		name,
+		email,
 		color: SIGNER_COLORS[index % SIGNER_COLORS.length] ?? SIGNER_COLORS[0],
 	}));
 	draft = {
@@ -273,26 +330,27 @@ export async function getSigningContext(): Promise<
 		signers,
 		layout: result.layout,
 	};
-	const signer = signers[result.signerIndex] ?? signers[0];
+	const signer = signers.find((item) => item.id === result.you.id);
 	if (!signer) return { error: "This document has no signer." };
 	return {
-		status: result.status,
-		declineReason: result.declineReason,
+		status: result.kind === "completed" ? "completed" : "signing",
+		declineReason: null,
 		signer,
-		signerIndex: result.signerIndex,
-		signerCount: result.signerCount,
-		fields: result.fields,
+		signerIndex: result.you.order - 1,
+		signerCount: result.count,
+		fields: result.kind === "ready" ? result.fields : [],
 		records: result.records,
 		stateHash: result.stateHash,
 		upload: result.upload,
 		layout: result.layout,
 		fileName: result.fileName,
+		dateSigned: result.dateSigned,
 	};
 }
 
 export async function submitSignature(
 	body: SubmitSignatureInput,
-): Promise<SigningContext | { error: string }> {
+): Promise<SigningContext | RestingContext | { error: string }> {
 	const result = await submitSignatureFn({ data: body });
 	if ("error" in result) return result;
 	return getSigningContext();
@@ -300,7 +358,7 @@ export async function submitSignature(
 
 export async function declineSignature(
 	reason: string,
-): Promise<SigningContext | { error: string }> {
+): Promise<SigningContext | RestingContext | { error: string }> {
 	const result = await declineSignatureFn({ data: { reason } });
 	if ("error" in result) return result;
 	return getSigningContext();

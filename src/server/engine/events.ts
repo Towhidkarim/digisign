@@ -48,6 +48,8 @@ export const sendEmailPayloadSchema = z.object({
 	token: z.string().optional(),
 	origin: z.string().optional(),
 	actor: z.string().optional(),
+	/** The decliner's reason. Written only on the owner's declined notice. */
+	reason: z.string().optional(),
 });
 
 export type SendEmailPayload = z.infer<typeof sendEmailPayloadSchema>;

@@ -5,7 +5,7 @@ import { getDb } from "#/db/index.ts";
 import { documents, signers } from "#/db/schema/index.ts";
 
 const TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
-const SESSION_ABSOLUTE_MS = 2 * 60 * 60 * 1000;
+export const SESSION_ABSOLUTE_MS = 2 * 60 * 60 * 1000;
 const SESSION_IDLE_MS = 30 * 60 * 1000;
 
 export function randomSecret(): string {

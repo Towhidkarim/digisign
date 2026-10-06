@@ -17,6 +17,9 @@ const STORAGE_KEY = "digisign.sign.v1";
 
 export type SignerRecord = {
 	signerId: string;
+	/** Set by the signing view so the signed PDF can name each signer without their id or email. */
+	order?: number;
+	name?: string;
 	signedAt: number;
 	values: FieldValue[];
 	valuesSha256: string;
@@ -43,6 +46,30 @@ export type SigningContext = {
 	upload: UploadInit;
 	layout: SaveLayoutInput;
 	fileName: string;
+	/** What the "Date signed" field previews. Absent for the local rehearsal session. */
+	dateSigned?: { text: string; reliable: boolean };
+};
+
+/** A signer who is no longer waiting: signed, declined, or the document stopped. */
+export type RestingContext = {
+	status: "resting";
+	title: string;
+	you: { name: string; email: string; order: number };
+	count: number;
+	view:
+		| {
+				kind: "signed-waiting";
+				signedAt: number;
+				nextSignerName: string | null;
+		  }
+		| {
+				kind: "declined-by-you";
+				reason: string | null;
+				declinedAt: number | null;
+		  }
+		| { kind: "stopped" }
+		| { kind: "voided" }
+		| { kind: "expired" };
 };
 
 let session: SigningSession | null = null;

@@ -43,9 +43,9 @@ export async function buildManifest(input: {
 	for (const record of input.records) {
 		const signer = input.signers.find((item) => item.id === record.signerId);
 		signers.push({
-			order: signers.length + 1,
+			order: record.order ?? signers.length + 1,
 			signerId: record.signerId,
-			name: signer?.name || "Signer",
+			name: record.name ?? (signer?.name || "Signer"),
 			signedAt: record.signedAt,
 			values: record.values,
 			valuesSha256: record.valuesSha256,

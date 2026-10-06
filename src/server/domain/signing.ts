@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { canonicalJson } from "#/core/canonical-json.ts";
 import {
@@ -12,11 +12,13 @@ import {
 	saveLayoutInputSchema,
 } from "#/core/contracts/index.ts";
 import { sha256Hex } from "#/core/hash.ts";
+import type { InviteReason } from "#/core/invite-reason.ts";
 import { limits } from "#/core/limits.ts";
 import { ulid } from "#/core/ulid.ts";
 import { commitOrReplay, guardedBatch } from "#/db/guarded-batch.ts";
 import { getDb } from "#/db/index.ts";
 import {
+	auditEvents,
 	blobIntents,
 	documents,
 	idempotencyKeys,
@@ -26,7 +28,8 @@ import {
 } from "#/db/schema/index.ts";
 import type { SignerRecord } from "#/features/sign/session.ts";
 import { signingStateHash } from "#/features/sign/state-hash.ts";
-import { formatSignedAt } from "#/features/sign/values.ts";
+import { formatSignedAt, signedDatePreview } from "#/features/sign/values.ts";
+import { ownerContact } from "#/server/actor.ts";
 import { insertAudit, planAudit } from "#/server/domain/audit.ts";
 import {
 	evidenceKey,
@@ -40,52 +43,134 @@ import {
 	nextIdle,
 	randomSecret,
 	readLastOpId,
+	SESSION_ABSOLUTE_MS,
 	secretHash,
 	sessionWindow,
 } from "#/server/domain/secrets.ts";
 import { outboxInsert } from "#/server/engine/events.ts";
-import { AppError } from "#/server/errors.ts";
+import { AppError, InviteLinkError } from "#/server/errors.ts";
 
 export const SIGNER_COOKIE = "digisign_signer";
 
 const geometryList = z.array(pageGeometrySchema);
 
-export type SigningView = {
-	status: "signing" | "declined" | "completed";
-	declineReason: string | null;
-	fileName: string;
-	signer: { id: string; name: string; email: string };
-	signers: { id: string; name: string; email: string }[];
-	signerIndex: number;
-	signerCount: number;
-	fields: FieldInput[];
-	records: SignerRecord[];
-	stateHash: string;
-	upload: {
-		documentId: string;
-		sha256: string;
-		sizeBytes: number;
-		pageCount: number;
-		geometry: PageGeometryInput[];
-	};
-	layout: SaveLayoutInput;
+export type SignerStatus =
+	| "pending"
+	| "invited"
+	| "signed"
+	| "declined"
+	| "voided";
+
+/** What a signer may know about another signer: where they are in the order and their name. */
+export type OtherSigner = { order: number; name: string; status: SignerStatus };
+
+/** The "Date signed" preview. When `reliable` is false the page says "Filled in when you sign". */
+export type DatePreview = { text: string; reliable: boolean };
+
+type ViewBase = {
+	title: string;
+	/** The document owner, who sent it. */
+	sender: { name: string; email: string };
+	/** The signer's own details. No other signer's email is ever returned. */
+	you: { id: string; name: string; email: string; order: number };
+	count: number;
+	others: OtherSigner[];
+	serverNow: number;
+	dateSigned: DatePreview;
 };
 
-export async function exchangeSignerToken(input: {
-	token: string;
-	now?: number;
-}): Promise<{ sessionId: string }> {
-	const now = input.now ?? Date.now();
-	const tokenHash = await secretHash(input.token);
+export type SigningView = ViewBase &
+	(
+		| {
+				/** Invited, and the document is in progress. */
+				kind: "ready";
+				fileName: string;
+				fields: FieldInput[];
+				records: SignerRecord[];
+				stateHash: string;
+				upload: SigningUpload;
+				layout: SaveLayoutInput;
+		  }
+		| {
+				/** Signed, and others still have to sign. */
+				kind: "signed-waiting";
+				signedAt: number;
+				nextSignerName: string | null;
+		  }
+		| {
+				/** Signed, and the document is completed. */
+				kind: "completed";
+				signedAt: number;
+				fileName: string;
+				records: SignerRecord[];
+				stateHash: string;
+				upload: SigningUpload;
+				layout: SaveLayoutInput;
+		  }
+		| {
+				kind: "declined-by-you";
+				reason: string | null;
+				declinedAt: number | null;
+		  }
+		| { kind: "stopped" }
+		| { kind: "voided" }
+		| { kind: "expired" }
+	);
+
+export type SigningViewKind = SigningView["kind"];
+
+type SigningUpload = {
+	documentId: string;
+	sha256: string;
+	sizeBytes: number;
+	pageCount: number;
+	geometry: PageGeometryInput[];
+};
+
+export type InvitePeek =
+	| { reason: "invalid" }
+	| ({
+			reason: Exclude<InviteReason, "ready" | "invalid">;
+			/** True when this signer is the one who declined. Only set with "stopped". */
+			byYou?: boolean;
+	  } & InviteDocumentInfo)
+	| ({
+			reason: "ready";
+			signerName: string;
+			signerEmail: string;
+			order: number;
+			count: number;
+			nextSignerName: string | null;
+			requiredFieldCount: number;
+			/** The earlier of the link's expiry and the document's expiry. */
+			expiresAt: number;
+	  } & InviteDocumentInfo);
+
+type InviteDocumentInfo = {
+	title: string;
+	senderName: string;
+	senderEmail: string;
+	serverNow: number;
+};
+
+type InviteLookup = {
+	reason: InviteReason;
+	byYou?: boolean;
+	token?: typeof signerTokens.$inferSelect;
+	signer?: typeof signers.$inferSelect;
+	document?: typeof documents.$inferSelect;
+};
+
+/** Read-only: decides what an invite link is, without touching anything. */
+async function lookupInvite(token: string, now: number): Promise<InviteLookup> {
+	if (token.length < 20 || token.length > 200) return { reason: "invalid" };
 	const db = getDb();
 	const [tokenRow] = await db
 		.select()
 		.from(signerTokens)
-		.where(eq(signerTokens.tokenHash, tokenHash))
+		.where(eq(signerTokens.tokenHash, await secretHash(token)))
 		.limit(1);
-	if (!tokenRow || tokenRow.revokedAt != null || tokenRow.expiresAt <= now) {
-		throw new AppError(401, "This link is no longer valid.");
-	}
+	if (!tokenRow) return { reason: "invalid" };
 	const [signer] = await db
 		.select()
 		.from(signers)
@@ -98,23 +183,119 @@ export async function exchangeSignerToken(input: {
 				.where(eq(documents.id, signer.documentId))
 				.limit(1)
 		: [];
+	if (!signer || !document) return { reason: "invalid" };
+	const found = { token: tokenRow, signer, document };
+	const byYou = signer.status === "declined";
+	switch (document.status) {
+		case "completed":
+			return { ...found, reason: "signed" };
+		case "declined":
+			return { ...found, reason: "stopped", byYou };
+		case "voided":
+			return { ...found, reason: "cancelled" };
+		case "expired":
+			return { ...found, reason: "expired" };
+		case "in_progress":
+			break;
+		default:
+			return { reason: "invalid" };
+	}
+	if (signer.status === "signed") return { ...found, reason: "signed" };
+	if (signer.status === "declined") {
+		return { ...found, reason: "stopped", byYou };
+	}
+	if (signer.status === "voided") return { ...found, reason: "cancelled" };
+	if (signer.status !== "invited") return { reason: "invalid" };
+	if (tokenRow.revokedAt != null) return { ...found, reason: "replaced" };
 	if (
-		!signer ||
-		signer.status !== "invited" ||
-		!document ||
-		document.status !== "in_progress"
+		tokenRow.expiresAt <= now ||
+		(document.expiresAt != null && document.expiresAt <= now)
 	) {
-		throw new AppError(401, "This link is no longer valid.");
+		return { ...found, reason: "expired" };
+	}
+	return { ...found, reason: "ready" };
+}
+
+/**
+ * What the invite page needs. It never consumes or revokes a token, never records
+ * `signer.viewed` and never creates a session. An unknown token returns only its reason.
+ */
+export async function peekInvite(input: {
+	token: string;
+	now?: number;
+}): Promise<InvitePeek> {
+	const now = input.now ?? Date.now();
+	const found = await lookupInvite(input.token, now);
+	if (!found.signer || !found.document || !found.token) {
+		return { reason: "invalid" };
+	}
+	const { signer, document } = found;
+	const owner = await ownerContact(document.ownerId);
+	const info: InviteDocumentInfo = {
+		title: document.title,
+		senderName: owner?.name ?? "",
+		senderEmail: owner?.email ?? "",
+		serverNow: now,
+	};
+	if (found.reason !== "ready") {
+		return {
+			reason: found.reason as Exclude<InviteReason, "ready" | "invalid">,
+			...(found.byYou === undefined ? {} : { byYou: found.byYou }),
+			...info,
+		};
+	}
+	const people = await getDb()
+		.select({
+			order: signers.signingOrder,
+			name: signers.name,
+		})
+		.from(signers)
+		.where(eq(signers.documentId, document.id))
+		.orderBy(asc(signers.signingOrder));
+	const layout = readLayout(
+		document.id,
+		document.layoutJson,
+		document.layoutVersion,
+	);
+	return {
+		reason: "ready",
+		signerName: signer.name,
+		signerEmail: signer.email,
+		order: signer.signingOrder,
+		count: people.length,
+		nextSignerName:
+			people.find((person) => person.order > signer.signingOrder)?.name ?? null,
+		requiredFieldCount: layout.fields.filter(
+			(field) => field.signerId === signer.id && field.required,
+		).length,
+		expiresAt: Math.min(
+			found.token.expiresAt,
+			document.expiresAt ?? Number.POSITIVE_INFINITY,
+		),
+		...info,
+	};
+}
+
+export async function exchangeSignerToken(input: {
+	token: string;
+	now?: number;
+}): Promise<{ sessionId: string }> {
+	const now = input.now ?? Date.now();
+	const found = await lookupInvite(input.token, now);
+	if (found.reason !== "ready" || !found.signer) {
+		throw new InviteLinkError(found.reason);
 	}
 	const sessionId = randomSecret();
 	const window = sessionWindow(now);
-	await db.insert(signerSessions).values({
-		sessionHash: await secretHash(sessionId),
-		signerId: signer.id,
-		expiresAt: window.expiresAt,
-		idleExpiresAt: window.idleExpiresAt,
-		createdAt: now,
-	});
+	await getDb()
+		.insert(signerSessions)
+		.values({
+			sessionHash: await secretHash(sessionId),
+			signerId: found.signer.id,
+			expiresAt: window.expiresAt,
+			idleExpiresAt: window.idleExpiresAt,
+			createdAt: now,
+		});
 	return { sessionId };
 }
 
@@ -544,13 +725,65 @@ async function markViewed(
 async function buildView(
 	document: typeof documents.$inferSelect,
 	signer: typeof signers.$inferSelect,
-	_now: number,
+	now: number,
 ): Promise<SigningView> {
 	const people = await getDb()
 		.select()
 		.from(signers)
 		.where(eq(signers.documentId, document.id))
 		.orderBy(asc(signers.signingOrder));
+	const owner = await ownerContact(document.ownerId);
+	const base: ViewBase = {
+		title: document.title,
+		sender: { name: owner?.name ?? "", email: owner?.email ?? "" },
+		you: {
+			id: signer.id,
+			name: signer.name,
+			email: signer.email,
+			order: signer.signingOrder,
+		},
+		count: people.length,
+		others: people
+			.filter((person) => person.id !== signer.id)
+			.map((person) => ({
+				order: person.signingOrder,
+				name: person.name,
+				status: person.status as SignerStatus,
+			})),
+		serverNow: now,
+		dateSigned: signedDatePreview(now, SESSION_ABSOLUTE_MS),
+	};
+	if (document.status === "voided" || signer.status === "voided") {
+		return { ...base, kind: "voided" };
+	}
+	if (document.status === "expired") return { ...base, kind: "expired" };
+	if (signer.status === "declined") {
+		return {
+			...base,
+			kind: "declined-by-you",
+			reason: signer.declineReason,
+			declinedAt: await declinedAt(document.id, signer.id),
+		};
+	}
+	if (document.status === "declined") return { ...base, kind: "stopped" };
+	if (signer.status === "signed" && document.status === "in_progress") {
+		return {
+			...base,
+			kind: "signed-waiting",
+			signedAt: signer.signedAt ?? now,
+			nextSignerName:
+				people.find((person) => person.signingOrder > signer.signingOrder)
+					?.name ?? null,
+		};
+	}
+	const completed =
+		document.status === "completed" && signer.status === "signed";
+	if (
+		!completed &&
+		!(document.status === "in_progress" && signer.status === "invited")
+	) {
+		throw new AppError(409, "This document is not waiting for your signature.");
+	}
 	const layout = readLayout(
 		document.id,
 		document.layoutJson,
@@ -564,6 +797,8 @@ async function buildView(
 		if (!evidence) continue;
 		records.push({
 			signerId: person.id,
+			order: person.signingOrder,
+			name: person.name,
 			signedAt: evidence.signedAt,
 			values: evidence.values,
 			valuesSha256: evidence.valuesSha256,
@@ -577,49 +812,56 @@ async function buildView(
 		sourceSha256: document.sourceSha256 ?? "",
 		geometry,
 		layout,
-		priorEvidenceSha256:
-			document.status === "completed" ? priorHashes.slice(0, -1) : priorHashes,
+		priorEvidenceSha256: completed ? priorHashes.slice(0, -1) : priorHashes,
 	});
-	const status =
-		document.status === "completed"
-			? "completed"
-			: document.status === "declined" || signer.status === "declined"
-				? "declined"
-				: "signing";
-	if (status === "signing" && signer.status !== "invited") {
-		throw new AppError(409, "This document is not waiting for your signature.");
+	const upload = {
+		documentId: document.id,
+		sha256: document.sourceSha256 ?? "",
+		sizeBytes: document.sourceSize ?? 0,
+		pageCount: document.pageCount,
+		geometry,
+	};
+	if (completed) {
+		return {
+			...base,
+			kind: "completed",
+			signedAt: signer.signedAt ?? now,
+			fileName: document.title,
+			records,
+			stateHash,
+			upload,
+			layout,
+		};
 	}
-	const signerIndex = Math.max(
-		0,
-		people.findIndex((person) => person.id === signer.id),
-	);
 	return {
-		status,
-		declineReason: signer.declineReason,
+		...base,
+		kind: "ready",
 		fileName: document.title,
-		signer: { id: signer.id, name: signer.name, email: signer.email },
-		signers: people.map((person) => ({
-			id: person.id,
-			name: person.name,
-			email: person.email,
-		})),
-		signerIndex,
-		signerCount: people.length,
 		fields: layout.fields.filter((field) => field.signerId === signer.id),
-		records:
-			status === "signing"
-				? records.filter((record) => record.signerId !== signer.id)
-				: records,
+		records: records.filter((record) => record.signerId !== signer.id),
 		stateHash,
-		upload: {
-			documentId: document.id,
-			sha256: document.sourceSha256 ?? "",
-			sizeBytes: document.sourceSize ?? 0,
-			pageCount: document.pageCount,
-			geometry,
-		},
+		upload,
 		layout,
 	};
+}
+
+async function declinedAt(
+	documentId: string,
+	signerId: string,
+): Promise<number | null> {
+	const [row] = await getDb()
+		.select({ occurredAt: auditEvents.occurredAt })
+		.from(auditEvents)
+		.where(
+			and(
+				eq(auditEvents.documentId, documentId),
+				eq(auditEvents.type, "signer.declined"),
+				eq(auditEvents.actorId, signerId),
+			),
+		)
+		.orderBy(desc(auditEvents.seq))
+		.limit(1);
+	return row?.occurredAt ?? null;
 }
 
 async function buildCompletedManifest(input: {

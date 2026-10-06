@@ -173,6 +173,7 @@ export async function signWithToken(
 	if (!signer) throw new Error("No such signer.");
 	const exchanged = await exchangeSignerToken({ token });
 	const view = await getSigningContext({ sessionId: exchanged.sessionId });
+	if (view.kind !== "ready") throw new Error("The signer is not waiting.");
 	return submitSignature({
 		sessionId: exchanged.sessionId,
 		body: {

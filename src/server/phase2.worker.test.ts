@@ -482,6 +482,7 @@ async function readyToSign() {
 	const token = invited.token;
 	const exchanged = await exchangeSignerToken({ token });
 	const view = await getSigningContext({ sessionId: exchanged.sessionId });
+	if (view.kind !== "ready") throw new Error("The signer is not waiting.");
 	return {
 		documentId: uploaded.documentId,
 		signerId,

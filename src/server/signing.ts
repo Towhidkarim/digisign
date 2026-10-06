@@ -9,18 +9,26 @@ import {
 import { z } from "zod";
 
 import { submitSignatureInputSchema } from "#/core/contracts/index.ts";
+import type { InviteReason } from "#/core/invite-reason.ts";
 import {
 	declineSignature,
 	exchangeSignerToken,
 	getSigningContext,
+	peekInvite,
 	SIGNER_COOKIE,
 	submitSignature,
 } from "#/server/domain/signing.ts";
 import { publishOutboxQuietly } from "#/server/engine/outbox.ts";
-import { isAppError } from "#/server/errors.ts";
+import { isAppError, isInviteLinkError } from "#/server/errors.ts";
 
-const tokenSchema = z.strictObject({ token: z.string().min(20).max(200) });
+/** Length is judged by the domain, so a malformed token gets the "invalid" reason, not a thrown error. */
+const tokenSchema = z.strictObject({ token: z.string().max(2000) });
 const declineSchema = z.strictObject({ reason: z.string().max(500) });
+
+/** Read-only. Safe for link scanners: nothing is consumed, recorded or created. */
+export const peekInviteFn = createServerFn({ method: "POST" })
+	.validator(tokenSchema)
+	.handler(async ({ data }) => peekInvite({ token: data.token }));
 
 export const exchangeSignerTokenFn = createServerFn({ method: "POST" })
 	.validator(tokenSchema)
@@ -88,12 +96,15 @@ export const declineSignatureFn = createServerFn({ method: "POST" })
 
 async function settle<T>(
 	run: () => Promise<T>,
-): Promise<T | { error: string }> {
+): Promise<T | { error: string; reason?: InviteReason }> {
 	try {
 		return await run();
 	} catch (error) {
 		if (error instanceof Error && error.message.startsWith("Open the invite")) {
 			return { error: error.message };
+		}
+		if (isInviteLinkError(error)) {
+			return { error: error.message, reason: error.reason };
 		}
 		if (isAppError(error)) return { error: error.message };
 		throw error;
