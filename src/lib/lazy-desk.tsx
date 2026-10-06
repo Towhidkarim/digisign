@@ -14,12 +14,13 @@ type Loader<P> = () => Promise<{ default: ComponentType<P> }>;
  */
 export function lazyDesk<P extends object>(
 	load: Loader<P> | null,
+	fallback: ReactElement = <DeskSkeleton />,
 ): (props: P) => ReactElement | null {
 	if (!load) return () => null;
 	const Screen = lazy(load);
 	return function Desk(props: P) {
 		return (
-			<Suspense fallback={<DeskSkeleton />}>
+			<Suspense fallback={fallback}>
 				<Screen {...props} />
 			</Suspense>
 		);

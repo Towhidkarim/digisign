@@ -1,7 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
 
-import { AppHeader } from "#/components/app-header.tsx";
+import { Logo } from "#/components/logo.tsx";
+import { Alert, AlertDescription } from "#/components/ui/alert.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { Label } from "#/components/ui/label.tsx";
@@ -17,6 +19,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
+	const [showPassword, setShowPassword] = useState(false);
 	const [message, setMessage] = useState("");
 	const [busy, setBusy] = useState(false);
 	const signup = mode === "signup";
@@ -46,37 +49,41 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 	}
 
 	return (
-		<div className="mx-auto w-[min(64rem,calc(100%-2.5rem))] pt-6 pb-10 text-foreground">
-			<AppHeader>
-				<nav aria-label="Account" className="text-[0.95rem] font-medium">
-					<Link
-						to="/verify"
-						className="text-foreground no-underline hover:text-primary"
-					>
-						Check a PDF
-					</Link>
-				</nav>
-			</AppHeader>
+		<div className="min-h-svh bg-background text-foreground">
+			<header className="flex h-16 items-center justify-between border-b border-border bg-card px-4 sm:px-6">
+				<Logo className="max-sm:min-h-11" />
+				<Button asChild variant="ghost" className="max-sm:min-h-11">
+					<Link to="/verify">Check a PDF</Link>
+				</Button>
+			</header>
 
-			<main className="mx-auto w-full max-w-sm py-14">
-				<h1 className="text-[clamp(1.7rem,3vw,2.1rem)] leading-tight font-semibold tracking-tight">
-					{signup ? "Create your account" : "Sign in"}
+			<main className="mx-auto w-full max-w-110 px-4 pt-10 pb-16 sm:pt-16">
+				<h1 className="text-title font-semibold tracking-tight">
+					{signup ? "Create your account" : "Welcome back"}
 				</h1>
-				<p className="mt-3 leading-relaxed text-muted-foreground">
+				<p className="mt-2 text-muted-foreground">
 					{signup
 						? "Accounts are for people who send documents. Signers do not need one."
 						: "Sign in to prepare and send documents."}
 				</p>
+
 				<form
-					className="mt-8 flex flex-col gap-4"
+					className="mt-8 flex flex-col gap-5 rounded-xl border border-border bg-card p-5 sm:p-6"
 					onSubmit={(event) => void submit(event)}
 				>
+					{message ? (
+						<Alert variant="destructive" role="alert">
+							<AlertDescription className="mt-0">{message}</AlertDescription>
+						</Alert>
+					) : null}
 					{signup ? (
 						<Field label="Name" id="auth-name">
 							<Input
 								id="auth-name"
 								autoComplete="name"
 								required
+								autoFocus
+								className="h-11"
 								value={name}
 								onChange={(event) => setName(event.target.value)}
 							/>
@@ -88,52 +95,89 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 							type="email"
 							autoComplete="email"
 							required
+							autoFocus={!signup}
+							className="h-11"
 							value={email}
 							onChange={(event) => setEmail(event.target.value)}
 						/>
 					</Field>
-					<Field label="Password" id="auth-password">
-						<Input
-							id="auth-password"
-							type="password"
-							autoComplete={signup ? "new-password" : "current-password"}
-							required
-							minLength={8}
-							maxLength={128}
-							value={password}
-							onChange={(event) => setPassword(event.target.value)}
-						/>
-						{signup ? (
-							<span className="text-xs text-muted-foreground">
-								At least 8 characters.
-							</span>
-						) : null}
+					<Field
+						label="Password"
+						id="auth-password"
+						help={signup ? "At least 8 characters." : undefined}
+					>
+						<div className="relative">
+							<Input
+								id="auth-password"
+								type={showPassword ? "text" : "password"}
+								autoComplete={signup ? "new-password" : "current-password"}
+								required
+								minLength={8}
+								maxLength={128}
+								className="h-11 pr-11"
+								aria-describedby={signup ? "auth-password-help" : undefined}
+								value={password}
+								onChange={(event) => setPassword(event.target.value)}
+							/>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="absolute top-0 right-0 size-11 text-muted-foreground"
+								aria-label={showPassword ? "Hide password" : "Show password"}
+								aria-pressed={showPassword}
+								onClick={() => setShowPassword((value) => !value)}
+							>
+								{showPassword ? (
+									<EyeOff aria-hidden="true" className="size-4" />
+								) : (
+									<Eye aria-hidden="true" className="size-4" />
+								)}
+							</Button>
+						</div>
 					</Field>
-					<Button type="submit" size="lg" disabled={busy} className="mt-2">
+					<Button
+						type="submit"
+						className="h-11 w-full"
+						disabled={busy}
+						aria-busy={busy}
+					>
+						{busy ? (
+							<LoaderCircle
+								aria-hidden="true"
+								className="size-4 animate-spin motion-reduce:animate-none"
+							/>
+						) : null}
 						{busy ? "Please wait…" : signup ? "Create account" : "Sign in"}
 					</Button>
-					{message ? (
-						<p className="text-sm text-destructive" role="alert">
-							{message}
-						</p>
-					) : null}
 				</form>
-				<p className="mt-6 text-sm text-muted-foreground">
+
+				<p className="mt-6 text-center text-sm text-muted-foreground">
 					{signup ? (
 						<>
 							Already have an account?{" "}
-							<Link to="/login" className="font-medium text-foreground">
+							<Link
+								to="/login"
+								className="inline-flex items-center font-medium text-foreground underline max-sm:min-h-11"
+							>
 								Sign in
 							</Link>
 						</>
 					) : (
 						<>
 							New here?{" "}
-							<Link to="/signup" className="font-medium text-foreground">
+							<Link
+								to="/signup"
+								className="inline-flex items-center font-medium text-foreground underline max-sm:min-h-11"
+							>
 								Create an account
 							</Link>
 						</>
 					)}
+				</p>
+				<p className="mt-3 text-center text-small text-muted-foreground">
+					Asked to sign a document? Open the link in your email. You don't need
+					an account.
 				</p>
 			</main>
 		</div>
@@ -143,16 +187,23 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 function Field({
 	label,
 	id,
+	help,
 	children,
 }: {
 	label: string;
 	id: string;
-	children: React.ReactNode;
+	help?: string;
+	children: ReactNode;
 }) {
 	return (
-		<div className="flex flex-col gap-1.5">
+		<div className="flex flex-col gap-2">
 			<Label htmlFor={id}>{label}</Label>
 			{children}
+			{help ? (
+				<span id={`${id}-help`} className="text-small text-muted-foreground">
+					{help}
+				</span>
+			) : null}
 		</div>
 	);
 }
