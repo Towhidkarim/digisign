@@ -230,6 +230,62 @@ describe("signing context kinds", () => {
 	});
 });
 
+describe("submitting", () => {
+	it("returns when it was signed, and the same result for the same key", async () => {
+		const built = await buildPublished(2);
+		await invite(built);
+		const session = await open(built, 0);
+		const view = await getSigningContext({ sessionId: session });
+		if (view.kind !== "ready") throw new Error("Not ready.");
+		const signer = built.signers[0];
+		if (!signer) throw new Error("No signer.");
+		const body = {
+			idempotencyKey: crypto.randomUUID(),
+			stateHash: view.stateHash,
+			consent: true as const,
+			values: [
+				{
+					fieldId: signer.fieldId,
+					signature: {
+						kind: "typed" as const,
+						text: "Ava",
+						font: "script-1" as const,
+					},
+				},
+			],
+		};
+		const meta = { ip: "203.0.113.9", userAgent: "test", origin: ORIGIN };
+		const first = await submitSignature({ sessionId: session, body, ...meta });
+		expect(first.status).toBe("signed");
+		expect(typeof first.signedAt).toBe("number");
+		const again = await submitSignature({ sessionId: session, body, ...meta });
+		expect(again).toEqual(first);
+		expect(
+			await count(
+				"SELECT count(*) AS n FROM audit_events WHERE document_id = ? AND type = ?",
+				built.documentId,
+				"signer.signed",
+			),
+		).toBe(1);
+		await expect(
+			submitSignature({
+				sessionId: session,
+				body: { ...body, values: [] },
+				...meta,
+			}),
+		).rejects.toThrow("already sent with different details");
+	});
+
+	it("a declined document needs a reason", async () => {
+		const built = await buildPublished(1);
+		await invite(built);
+		const session = await open(built, 0);
+		await expect(
+			declineSignature({ sessionId: session, reason: "   ", origin: ORIGIN }),
+		).rejects.toThrow("Say why you are declining.");
+	});
+});
+
 describe("invite lookup", () => {
 	it("ready: names the document, the sender, the signer and the expiry", async () => {
 		const built = await buildPublished(3);
@@ -259,6 +315,14 @@ describe("invite lookup", () => {
 			.bind(built.signers[0]?.id)
 			.first<{ e: number }>();
 		expect(peek.expiresAt).toBe(Math.min(document?.e ?? 0, token?.e ?? 0));
+	});
+
+	it("does not count the date and the name, which fill themselves in", async () => {
+		const built = await buildPublished(1, { autoFields: true });
+		await invite(built);
+		const peek = await peekInvite({ token: tokenOf(built, 0) });
+		if (peek.reason !== "ready") throw new Error("Not ready.");
+		expect(peek.requiredFieldCount).toBe(1);
 	});
 
 	it("the effective expiry is the earlier of the link and the document", async () => {

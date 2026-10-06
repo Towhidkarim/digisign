@@ -84,7 +84,10 @@ export type Built = {
 };
 
 /** A published document with `count` signers, each with one signature field. */
-export async function buildPublished(count: number): Promise<Built> {
+export async function buildPublished(
+	count: number,
+	options: { autoFields?: boolean } = {},
+): Promise<Built> {
 	const bytes = new TextEncoder().encode(`%PDF-1.4\nengine ${ulid()}`);
 	const documentId = ulid();
 	await createDraft({ id: documentId, title: "Lease", ownerId: DEV_OWNER_ID });
@@ -122,6 +125,18 @@ export async function buildPublished(count: number): Promise<Built> {
 	const fields = people.map((person, index) =>
 		signatureField(person.id, index),
 	);
+	const first = people[0];
+	if (options.autoFields && first) {
+		// The date and the name fill themselves in; the first signer gets one of each.
+		for (const [offset, kind] of (
+			["date_signed", "full_name"] as const
+		).entries()) {
+			fields.push({
+				...signatureField(first.id, count + offset + 1),
+				kind,
+			});
+		}
+	}
 	await saveLayout({
 		ownerId: DEV_OWNER_ID,
 		layout: { documentId, layoutVersion: 1, fields },

@@ -1,178 +1,365 @@
-import { Link } from "@tanstack/react-router";
-import { Asterisk } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Asterisk, Check, ChevronDown, MoreHorizontal } from "lucide-react";
+import {
+	type CSSProperties,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Document, Page } from "react-pdf";
 
-import { AppHeader } from "#/components/app-header.tsx";
+import { Button } from "#/components/ui/button.tsx";
 import {
-	AlertDialog,
-	AlertDialogAction,
-	AlertDialogCancel,
-	AlertDialogContent,
-	AlertDialogDescription,
-	AlertDialogFooter,
-	AlertDialogHeader,
-	AlertDialogTitle,
-} from "#/components/ui/alert-dialog.tsx";
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu.tsx";
 import type { FieldInput, FieldValue } from "#/core/contracts/index.ts";
 import { microToPercent, viewSize } from "#/core/coords.ts";
 import { limits } from "#/core/limits.ts";
-import {
-	declineSignature,
-	getDraft,
-	getSigningContext,
-	hydrateDraft,
-	submitSignature,
-} from "#/features/editor/draft.ts";
 import { FIELD_LABEL } from "#/features/editor/reducer.ts";
-import { unpackStrokes } from "#/features/sign/capture.ts";
 import { CaptureSheet } from "#/features/sign/capture-sheet.tsx";
-import { FittedScript } from "#/features/sign/fitted-script.tsx";
-import { buildManifest } from "#/features/sign/manifest.ts";
-import type {
-	RestingContext,
-	SigningContext,
-} from "#/features/sign/session.ts";
+import { Confirmation } from "#/features/sign/confirmation.tsx";
+import { DeclineDialog } from "#/features/sign/decline-dialog.tsx";
 import {
-	installScriptFaces,
-	loadScriptFonts,
-	SCRIPT_FACE,
-} from "#/pdf/fonts.ts";
-import { checkFractions, inkFractions, inkStrokeWidth } from "#/pdf/ink.ts";
+	clearEntries,
+	type FieldState,
+	fieldState,
+	INVITE_TOKEN_KEY,
+	keyFor,
+	loadEntries,
+	type Progress,
+	progressAlt,
+	progressLabel,
+	progressOf,
+	requiredFields,
+	SEGMENT_LIMIT,
+	saveEntries,
+} from "#/features/sign/desk-model.ts";
+import { InkGraphic } from "#/features/sign/ink-graphic.tsx";
+import { ReviewDialog, summaryRows } from "#/features/sign/review-dialog.tsx";
+import {
+	ConnectionLostScreen,
+	GenericProblemScreen,
+	InviteReasonScreen,
+	type Sender,
+	SessionTimedOutScreen,
+	SignerPage,
+} from "#/features/sign/signer-status.tsx";
+import {
+	CONNECTION_MESSAGE,
+	declineSignature,
+	fetchSource,
+	loadView,
+	type Problem,
+	reopenSession,
+	submitSignature,
+} from "#/features/sign/signing-client.ts";
+import { SigningSkeleton } from "#/features/sign/signing-skeleton.tsx";
+import { useMediaQuery } from "#/hooks/use-media-query.ts";
+import { cn } from "#/lib/utils.ts";
+import { installScriptFaces } from "#/pdf/fonts.ts";
 import "#/pdf/setup.ts";
-import { render } from "#/pdf/render.ts";
+import type { SigningView } from "#/server/domain/signing.ts";
+
+type Ready = Extract<SigningView, { kind: "ready" }>;
+
+type Screen =
+	| { t: "loading" }
+	| { t: "problem"; problem: Problem }
+	| { t: "ready"; view: Ready; bytes: Uint8Array }
+	| { t: "signed"; view: Ready; signedAt: number }
+	| { t: "done"; view: SigningView; bytes: Uint8Array | null };
+
+function senderOf(view: SigningView): Sender {
+	return {
+		name: view.sender.name,
+		email: view.sender.email,
+		title: view.title,
+	};
+}
 
 export function SigningDesk() {
-	const [context, setContext] = useState<
-		SigningContext | RestingContext | null
-	>(null);
-	const [error, setError] = useState("");
-	const [ready, setReady] = useState(false);
+	const [screen, setScreen] = useState<Screen>({ t: "loading" });
+	const [busy, setBusy] = useState(false);
+	const [retryError, setRetryError] = useState("");
 
-	useEffect(() => {
-		hydrateDraft();
-		let cancelled = false;
-		void getSigningContext().then((result) => {
-			if (cancelled) return;
-			if ("error" in result) setError(result.error);
-			else setContext(result);
-			setReady(true);
-		});
-		return () => {
-			cancelled = true;
-		};
+	const load = useCallback(async () => {
+		setScreen({ t: "loading" });
+		const loaded = await loadView();
+		if ("problem" in loaded) {
+			setScreen({ t: "problem", problem: loaded.problem });
+			return;
+		}
+		const { view } = loaded;
+		if (view.kind === "ready" || view.kind === "completed") {
+			const source = await fetchSource(view);
+			if ("error" in source) {
+				setScreen({
+					t: "problem",
+					problem: { kind: "other", message: source.error },
+				});
+				return;
+			}
+			setScreen(
+				view.kind === "ready"
+					? { t: "ready", view, bytes: source.bytes }
+					: { t: "done", view, bytes: source.bytes },
+			);
+			return;
+		}
+		setScreen({ t: "done", view, bytes: null });
 	}, []);
 
-	if (!ready) {
-		return (
-			<p className="px-6 py-16 text-sm text-muted-foreground">
-				Opening the document…
-			</p>
-		);
+	useEffect(() => {
+		void load();
+	}, [load]);
+
+	async function continueSigning() {
+		setBusy(true);
+		setRetryError("");
+		let token: string | null = null;
+		try {
+			token = sessionStorage.getItem(INVITE_TOKEN_KEY);
+		} catch {
+			token = null;
+		}
+		if (!token) {
+			setBusy(false);
+			setScreen({
+				t: "problem",
+				problem: { kind: "invite", reason: "expired", sender: null },
+			});
+			return;
+		}
+		const reopened = await reopenSession(token);
+		setBusy(false);
+		if ("problem" in reopened) {
+			if (reopened.problem.kind === "network") {
+				setRetryError(reopened.problem.message);
+				return;
+			}
+			setScreen({ t: "problem", problem: reopened.problem });
+			return;
+		}
+		await load();
 	}
-	if (error || !context) {
-		return (
-			<main className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-16">
-				<h1 className="text-2xl font-semibold text-primary">Nothing to sign</h1>
-				<p className="text-sm text-foreground">{error}</p>
-				<Link to="/prepare" className="text-sm text-primary">
-					Prepare a document
-				</Link>
-			</main>
-		);
+
+	switch (screen.t) {
+		case "loading":
+			return <SigningSkeleton />;
+		case "problem":
+			return (
+				<SignerPage>
+					<ProblemScreen
+						problem={screen.problem}
+						busy={busy}
+						error={retryError}
+						onContinue={() => void continueSigning()}
+						onRetry={() => void load()}
+					/>
+				</SignerPage>
+			);
+		case "ready":
+			return (
+				<Walk
+					key={screen.view.you.id}
+					view={screen.view}
+					bytes={screen.bytes}
+					onSigned={(signedAt) =>
+						setScreen({ t: "signed", view: screen.view, signedAt })
+					}
+					onCompleted={() => void load()}
+					onReload={() => void load()}
+					onProblem={(problem) => setScreen({ t: "problem", problem })}
+				/>
+			);
+		case "signed": {
+			const { view } = screen;
+			const next =
+				view.others.find((other) => other.order === view.you.order + 1)?.name ??
+				null;
+			return (
+				<Confirmation
+					kind="signed"
+					common={{
+						title: view.title,
+						documentId: view.documentId,
+						youName: view.you.name,
+						senderName: view.sender.name,
+						senderEmail: view.sender.email,
+					}}
+					signedAt={screen.signedAt}
+					nextSignerName={next}
+				/>
+			);
+		}
+		case "done":
+			return <FinishedView view={screen.view} bytes={screen.bytes} />;
 	}
-	if (context.status === "resting") return <Resting context={context} />;
-	if (context.status === "declined") {
-		return (
-			<main className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-16">
-				<h1 className="text-2xl font-semibold text-primary">Signing stopped</h1>
-				<p className="text-sm text-foreground">
-					{context.signer.name} declined this document.
-					{context.declineReason ? ` ${context.declineReason}` : ""}
-				</p>
-				<Link to="/" className="text-sm text-primary">
-					Back home
-				</Link>
-			</main>
-		);
-	}
-	if (context.status === "completed") {
-		return <Finished context={context} />;
-	}
-	return (
-		<Walk
-			key={context.signer.id}
-			context={context}
-			onContext={(next) => {
-				setError("");
-				setContext(next);
-			}}
-		/>
-	);
 }
 
-/** A signer who is no longer waiting. Plain for now; the signer screens restyle this. */
-function Resting({ context }: { context: RestingContext }) {
-	const { view } = context;
-	const lines: Record<RestingContext["view"]["kind"], [string, string]> = {
-		"signed-waiting": [
-			"You have signed this document",
-			view.kind === "signed-waiting" && view.nextSignerName
-				? `${view.nextSignerName} will be asked to sign next. You will get an email when everyone has signed.`
-				: "You will get an email when everyone has signed.",
-		],
-		"declined-by-you": [
-			"You declined this document",
-			view.kind === "declined-by-you" && view.reason
-				? view.reason
-				: "Signing has stopped.",
-		],
-		stopped: ["Signing stopped", "Another signer declined this document."],
-		voided: ["This document was cancelled", "The sender cancelled it."],
-		expired: ["This document has expired", "It was not finished in time."],
-	};
-	const [title, text] = lines[view.kind];
-	return (
-		<main className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-16">
-			<h1 className="text-2xl font-semibold text-primary">{title}</h1>
-			<p className="text-sm text-foreground">{text}</p>
-			<Link to="/" className="text-sm text-primary">
-				Back home
-			</Link>
-		</main>
-	);
+function ProblemScreen({
+	problem,
+	busy,
+	error,
+	onContinue,
+	onRetry,
+}: {
+	problem: Problem;
+	busy: boolean;
+	error: string;
+	onContinue: () => void;
+	onRetry: () => void;
+}) {
+	switch (problem.kind) {
+		case "session":
+			return (
+				<SessionTimedOutScreen
+					onContinue={onContinue}
+					busy={busy}
+					error={error}
+					sender={null}
+				/>
+			);
+		case "network":
+			return (
+				<ConnectionLostScreen onRetry={onRetry} busy={false} sender={null} />
+			);
+		case "invite":
+			return (
+				<InviteReasonScreen reason={problem.reason} sender={problem.sender} />
+			);
+		case "other":
+			return <GenericProblemScreen message={problem.message} />;
+	}
 }
+
+/** What a signer sees when they are not waiting: signed, declined, or the document stopped. */
+function FinishedView({
+	view,
+	bytes,
+}: {
+	view: SigningView;
+	bytes: Uint8Array | null;
+}) {
+	const common = {
+		title: view.title,
+		documentId: view.documentId,
+		youName: view.you.name,
+		senderName: view.sender.name,
+		senderEmail: view.sender.email,
+	};
+	switch (view.kind) {
+		case "completed":
+			return (
+				<Confirmation
+					kind="complete"
+					common={common}
+					youId={view.you.id}
+					completedAt={view.signedAt}
+					records={view.records}
+					source={bytes ? { view, bytes } : null}
+				/>
+			);
+		case "signed-waiting":
+			return (
+				<Confirmation
+					kind="waiting"
+					common={common}
+					youOrder={view.you.order}
+					signedAt={view.signedAt}
+					nextSignerName={view.nextSignerName}
+					others={view.others}
+				/>
+			);
+		case "declined-by-you":
+			return (
+				<Confirmation
+					kind="declined"
+					common={common}
+					declinedAt={view.declinedAt}
+					reason={view.reason}
+				/>
+			);
+		case "stopped":
+			return (
+				<SignerPage>
+					<InviteReasonScreen reason="stopped" sender={senderOf(view)} />
+				</SignerPage>
+			);
+		case "voided":
+			return (
+				<SignerPage>
+					<InviteReasonScreen reason="cancelled" sender={senderOf(view)} />
+				</SignerPage>
+			);
+		case "expired":
+			return (
+				<SignerPage>
+					<InviteReasonScreen reason="expired" sender={senderOf(view)} />
+				</SignerPage>
+			);
+		case "ready":
+			return null;
+	}
+}
+
+type Zoom = { mode: "fit" } | { mode: "percent"; percent: number };
+const ZOOM_PERCENTS = [50, 75, 100, 125, 150, 200] as const;
+const CSS_PX_PER_PT = 96 / 72;
 
 function Walk({
-	context,
-	onContext,
+	view,
+	bytes,
+	onSigned,
+	onCompleted,
+	onReload,
+	onProblem,
 }: {
-	context: SigningContext;
-	onContext: (next: SigningContext | RestingContext) => void;
+	view: Ready;
+	bytes: Uint8Array;
+	onSigned: (signedAt: number) => void;
+	onCompleted: () => void;
+	onReload: () => void;
+	onProblem: (problem: Problem) => void;
 }) {
-	const source = getDraft().bytes;
-	const file = useMemo(() => (source ? pdfBlob(source) : null), [source]);
-	const [answers, setAnswers] = useState<FieldValue[]>([]);
+	const file = useMemo(() => pdfBlob(bytes), [bytes]);
+	const [answers, setAnswers] = useState<FieldValue[]>(() =>
+		loadEntries(view.documentId, view.you.id, view.fields),
+	);
 	const [consent, setConsent] = useState(false);
 	const [captureId, setCaptureId] = useState<string | null>(null);
-	const [focusId, setFocusId] = useState<string | null>(null);
-	const [message, setMessage] = useState("");
-	const [busy, setBusy] = useState(false);
+	const [reviewOpen, setReviewOpen] = useState(false);
 	const [declineOpen, setDeclineOpen] = useState(false);
-	const [reason, setReason] = useState("");
-	const [frame, setFrame] = useState({ width: 720, height: 900 });
-	const [zoom, setZoom] = useState<SignZoom>({ mode: "percent", percent: 100 });
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState("");
+	const [declineError, setDeclineError] = useState("");
+	const [lost, setLost] = useState(false);
+	const [zoom, setZoom] = useState<Zoom>({ mode: "fit" });
+	const [frameWidth, setFrameWidth] = useState(720);
 	const scrollerRef = useRef<HTMLDivElement>(null);
-	const prior = context.records.flatMap((record) => record.values);
+	const keyRef = useRef<{ key: string; body: string } | null>(null);
+	const touch = useMediaQuery("(pointer: coarse)");
+
+	const progress = useMemo(
+		() => progressOf(view.fields, answers),
+		[view.fields, answers],
+	);
+	const prior = view.records.flatMap((record) => record.values);
+
+	useEffect(() => {
+		saveEntries(view.documentId, view.you.id, answers);
+	}, [answers, view.documentId, view.you.id]);
 
 	useEffect(() => {
 		const node = scrollerRef.current;
 		if (!node) return;
 		const measure = () => {
-			setFrame({
-				width: Math.max(280, node.clientWidth - 48),
-				height: Math.max(280, node.clientHeight - 48),
-			});
+			const pad = window.innerWidth < 768 ? 16 : 48;
+			setFrameWidth(Math.max(280, node.clientWidth - pad * 2));
 		};
 		measure();
 		const observer = new ResizeObserver(measure);
@@ -184,110 +371,293 @@ function Walk({
 		void installScriptFaces();
 	}, []);
 
-	function goToNextRequired() {
-		const missing = context.fields.filter(
-			(field) => field.required && !fieldFilled(field, answers),
+	const firstPage = view.upload.geometry[0];
+	const firstView = firstPage
+		? viewSize(firstPage)
+		: { viewW: 612, viewH: 792 };
+	const currentPercent = Math.round(
+		(pagePixels(firstView.viewW, firstView.viewH, zoom, frameWidth).width /
+			(firstView.viewW * CSS_PX_PER_PT)) *
+			100,
+	);
+
+	function stepZoom(direction: 1 | -1) {
+		const next =
+			direction === 1
+				? ZOOM_PERCENTS.find((percent) => percent > currentPercent)
+				: [...ZOOM_PERCENTS]
+						.reverse()
+						.find((percent) => percent < currentPercent);
+		if (next) setZoom({ mode: "percent", percent: next });
+	}
+
+	function control(id: string): HTMLElement | null {
+		return (
+			scrollerRef.current?.querySelector<HTMLElement>(
+				`[data-field-id="${id}"] [data-control]`,
+			) ?? null
 		);
-		if (missing.length === 0) return;
-		const current = missing.findIndex((field) => field.id === focusId);
-		const next = missing[(current + 1) % missing.length];
-		if (!next) return;
-		setFocusId(next.id);
-		document
-			.querySelector(`[data-field-id="${next.id}"]`)
-			?.scrollIntoView({ behavior: "smooth", block: "center" });
+	}
+
+	function focusField(id: string, activate: boolean) {
+		const target = control(id);
+		if (!target) return;
+		const reduced = window.matchMedia(
+			"(prefers-reduced-motion: reduce)",
+		).matches;
+		target.scrollIntoView({
+			behavior: reduced ? "auto" : "smooth",
+			block: "center",
+		});
+		target.focus({ preventScroll: true });
+		const field = view.fields.find((item) => item.id === id);
+		if (
+			activate &&
+			field &&
+			(field.kind === "signature" || field.kind === "initials")
+		) {
+			setCaptureId(id);
+		}
+	}
+
+	function primary() {
+		if (progress.left > 0 && progress.currentId) {
+			focusField(progress.currentId, true);
+			return;
+		}
+		setError("");
+		setReviewOpen(true);
 	}
 
 	async function sign() {
-		const missing = context.fields.find(
-			(field) => field.required && !fieldFilled(field, answers),
-		);
-		if (missing) {
-			setFocusId(missing.id);
-			setMessage("Complete the required fields first.");
-			document
-				.querySelector(`[data-field-id="${missing.id}"]`)
-				?.scrollIntoView({ behavior: "smooth", block: "center" });
-			return;
-		}
-		if (!consent) {
-			setMessage("Confirm the disclosure before signing.");
-			return;
-		}
+		if (busy) return;
 		setBusy(true);
-		setMessage("");
-		const result = await submitSignature({
-			idempotencyKey: crypto.randomUUID(),
-			stateHash: context.stateHash,
-			consent: true,
+		setError("");
+		const core = {
+			stateHash: view.stateHash,
+			consent: true as const,
 			values: answers,
+		};
+		// The same request keeps the same key, so a retry after a dropped connection cannot sign twice.
+		keyRef.current = keyFor(keyRef.current, JSON.stringify(core));
+		const out = await submitSignature({
+			idempotencyKey: keyRef.current.key,
+			...core,
 		});
 		setBusy(false);
-		if ("error" in result) {
-			setMessage(result.error);
+		if ("network" in out) {
+			setReviewOpen(false);
+			setLost(true);
 			return;
 		}
-		onContext(result);
+		if ("error" in out) {
+			setLost(false);
+			if (out.reason === "session") {
+				setReviewOpen(false);
+				onProblem({ kind: "session", message: out.error });
+				return;
+			}
+			setReviewOpen(true);
+			setError(out.error);
+			return;
+		}
+		clearEntries(view.documentId, view.you.id);
+		keyRef.current = null;
+		if (out.ok.status === "completed") onCompleted();
+		else onSigned(out.ok.signedAt);
 	}
 
-	async function decline() {
+	async function decline(reason: string) {
 		setBusy(true);
-		const result = await declineSignature(reason);
+		setDeclineError("");
+		const out = await declineSignature(reason);
 		setBusy(false);
-		if ("error" in result) {
-			setMessage(result.error);
+		if ("network" in out) {
+			setDeclineError(CONNECTION_MESSAGE);
 			return;
 		}
-		setDeclineOpen(false);
-		onContext(result);
+		if ("error" in out) {
+			if (out.reason === "session") {
+				setDeclineOpen(false);
+				onProblem({ kind: "session", message: out.error });
+				return;
+			}
+			setDeclineError(out.error);
+			return;
+		}
+		clearEntries(view.documentId, view.you.id);
+		onReload();
 	}
 
-	const capturing = context.fields.find((field) => field.id === captureId);
+	if (lost) {
+		return (
+			<SignerPage>
+				<ConnectionLostScreen
+					busy={busy}
+					sender={{
+						name: view.sender.name,
+						email: view.sender.email,
+						title: view.title,
+					}}
+					onRetry={() => void sign()}
+				/>
+			</SignerPage>
+		);
+	}
+
+	const capturing = view.fields.find((field) => field.id === captureId);
+	const nextName =
+		view.others.find((other) => other.order === view.you.order + 1)?.name ??
+		null;
+	const label = progress.left > 0 ? "Next field" : "Review and sign";
 
 	return (
 		<div className="flex h-svh flex-col bg-background">
-			<AppHeader bordered className="justify-start gap-2">
-				<p className="min-w-0 flex-1 truncate text-sm text-foreground">
-					{context.signer.name} · signer {context.signerIndex + 1} of{" "}
-					{context.signerCount}
-				</p>
-				<ZoomControls zoom={zoom} onZoom={setZoom} />
-				<button
-					type="button"
-					className="rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent"
-					onClick={goToNextRequired}
+			<header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
+				<span
+					aria-hidden="true"
+					className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground"
 				>
-					Next required field
-				</button>
-				<Link to="/prepare" className="text-sm text-primary">
-					Back to prepare
-				</Link>
-			</AppHeader>
-			<div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto">
-				{file ? (
+					D
+				</span>
+				<div className="min-w-0 flex-1 md:flex-none md:basis-72">
+					<h1 className="truncate text-sm font-semibold text-foreground">
+						{view.title}
+					</h1>
+					<p className="truncate text-small text-muted-foreground">
+						<span className="md:hidden">
+							Signing as {view.you.name} · {view.you.order} of {view.count}
+						</span>
+						<span className="hidden md:inline">
+							Sent by {view.sender.name || "the sender"} · You are signer{" "}
+							{view.you.order} of {view.count}
+						</span>
+					</p>
+				</div>
+				<div className="hidden min-w-0 flex-1 items-center justify-end gap-3 md:flex lg:justify-center">
+					<ProgressBar progress={progress} className="w-28 shrink-0 lg:w-48" />
+					<span
+						className={cn(
+							"text-sm font-semibold whitespace-nowrap",
+							progress.complete ? "text-success-fg" : "text-foreground",
+						)}
+					>
+						{progressLabel(progress)}
+					</span>
+				</div>
+				<div className="hidden items-center gap-1 lg:flex">
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						aria-label="Zoom out"
+						className="pointer-coarse:size-11"
+						onClick={() => stepZoom(-1)}
+					>
+						<span aria-hidden="true">−</span>
+					</Button>
+					<span className="w-12 text-center text-sm tabular-nums">
+						{currentPercent}%
+					</span>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						aria-label="Zoom in"
+						className="pointer-coarse:size-11"
+						onClick={() => stepZoom(1)}
+					>
+						<span aria-hidden="true">+</span>
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						aria-pressed={zoom.mode === "fit"}
+						className="pointer-coarse:min-h-11 aria-pressed:bg-accent"
+						onClick={() => setZoom({ mode: "fit" })}
+					>
+						Fit width
+					</Button>
+				</div>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button
+							type="button"
+							variant="ghost"
+							size="icon"
+							className="max-md:size-11 pointer-coarse:size-11"
+							aria-label="More options"
+						>
+							<MoreHorizontal aria-hidden="true" className="size-5" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end">
+						<DropdownMenuItem
+							className="min-h-11 text-destructive md:min-h-0"
+							onSelect={() => {
+								setDeclineError("");
+								setDeclineOpen(true);
+							}}
+						>
+							Decline to sign
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
+			</header>
+
+			<output className="sr-only" aria-live="polite">
+				{progressLabel(progress)}
+			</output>
+			<div className="shrink-0 border-b border-border bg-card px-4 py-3 md:hidden">
+				<div className="flex items-baseline justify-between gap-3">
+					<p
+						className={cn(
+							"font-semibold",
+							progress.complete ? "text-success-fg" : "text-foreground",
+						)}
+					>
+						{progressLabel(progress)}
+					</p>
+					<p className="text-sm text-muted-foreground">
+						{progress.done} of {progress.total} done
+					</p>
+				</div>
+				<ProgressBar progress={progress} className="mt-2 w-full" />
+			</div>
+
+			<div className="flex min-h-0 flex-1">
+				<div
+					ref={scrollerRef}
+					className="min-h-0 flex-1 overflow-auto bg-muted px-4 py-4 md:px-12 md:py-6"
+				>
 					<Document
 						file={file}
 						suspense={false}
 						loading={
-							<p className="py-16 text-sm text-muted-foreground">
+							<p className="py-16 text-center text-sm text-muted-foreground">
 								Opening the PDF…
 							</p>
 						}
 						error={
-							<p className="py-16 text-sm text-destructive">
+							<p className="py-16 text-center text-sm text-destructive">
 								This file could not be read as a PDF.
 							</p>
 						}
 					>
-						<div className="flex flex-col items-center gap-6 px-6 py-6">
-							{context.upload.geometry.map((page, index) => {
+						<div className="flex flex-col items-center gap-4 md:gap-6">
+							{view.upload.geometry.map((page, index) => {
 								const { viewW, viewH } = viewSize(page);
-								const { width, height } = pagePixels(viewW, viewH, zoom, frame);
+								const { width, height } = pagePixels(
+									viewW,
+									viewH,
+									zoom,
+									frameWidth,
+								);
 								return (
 									<div
-										key={pageIndexKey(index)}
+										key={pageKey(index)}
 										data-page-index={index}
-										className="on-paper relative border border-border bg-card"
+										className="on-paper relative shrink-0 border border-border bg-card shadow-sm"
 										style={{ width, height }}
 									>
 										<Page
@@ -302,36 +672,43 @@ function Walk({
 										/>
 										<div className="pointer-events-none absolute inset-0 z-10">
 											{prior.map((value) => {
-												const field = context.layout.fields.find(
+												const field = view.layout.fields.find(
 													(item) => item.id === value.fieldId,
 												);
 												if (!field || field.pageIndex !== index) return null;
 												return (
-													<PriorInk
+													<div
 														key={value.fieldId}
-														field={field}
-														value={value}
-														viewW={viewW}
-														viewH={viewH}
-													/>
+														className="absolute text-foreground"
+														style={boxStyle(field)}
+													>
+														<InkGraphic
+															field={field}
+															value={value}
+															viewW={viewW}
+															viewH={viewH}
+														/>
+													</div>
 												);
 											})}
 										</div>
-										{context.fields
+										{view.fields
 											.filter((field) => field.pageIndex === index)
 											.map((field) => (
-												<SignerField
+												<FieldBox
 													key={field.id}
 													field={field}
 													viewW={viewW}
 													viewH={viewH}
-													color={context.signer.color}
-													name={context.signer.name}
-													datePreview={context.dateSigned}
+													scale={width / viewW}
+													color={signerColor(view.you.order)}
+													name={view.you.name}
+													datePreview={view.dateSigned}
 													value={answers.find(
 														(item) => item.fieldId === field.id,
 													)}
-													focused={focusId === field.id}
+													state={fieldState(field, progress, answers)}
+													touch={touch}
 													onSignature={() => setCaptureId(field.id)}
 													onText={(text) =>
 														setAnswers((current) =>
@@ -350,50 +727,55 @@ function Walk({
 							})}
 						</div>
 					</Document>
-				) : null}
-			</div>
-			<footer className="flex flex-wrap items-center gap-3 border-t border-border bg-card px-3 py-3">
-				<label className="flex min-w-0 flex-1 items-start gap-2 text-sm text-foreground">
-					<input
-						type="checkbox"
-						className="mt-1"
-						checked={consent}
-						onChange={(event) => setConsent(event.target.checked)}
+				</div>
+
+				<aside className="hidden w-80 shrink-0 flex-col gap-6 overflow-y-auto border-l border-border bg-card p-4 lg:flex">
+					<FieldsPanel
+						view={view}
+						progress={progress}
+						answers={answers}
+						onJump={(id) => focusField(id, false)}
 					/>
-					<span>
-						I agree to sign this document electronically. This signature is as
-						binding as one written by hand.
-					</span>
-				</label>
-				<button
+					<OrderPanel view={view} />
+					<p className="mt-auto text-small text-muted-foreground">
+						Questions about this document? Contact{" "}
+						{view.sender.name || "the sender"} at {view.sender.email}. You can
+						decline from the more options menu.
+					</p>
+				</aside>
+			</div>
+
+			<footer className="flex shrink-0 items-center gap-4 border-t border-border bg-card p-3 md:px-6 md:py-4">
+				<p className="hidden flex-1 text-sm text-muted-foreground md:block">
+					{progress.left > 0
+						? "Fill in the highlighted fields, or use Next field to jump to the next one."
+						: "All fields are done. Review and sign when you're ready."}
+				</p>
+				<Button
 					type="button"
-					className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:underline"
-					onClick={() => setDeclineOpen(true)}
+					className="h-12 w-full text-base md:w-auto md:min-w-44"
+					onClick={primary}
 				>
-					Decline
-				</button>
-				<button
-					type="button"
-					className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
-					disabled={busy}
-					onClick={() => void sign()}
-				>
-					{context.signerIndex + 1 === context.signerCount
-						? "Finish signing"
-						: "Sign and continue"}
-				</button>
-				{message ? (
-					<p className="basis-full text-sm text-destructive">{message}</p>
-				) : null}
+					{label}
+				</Button>
 			</footer>
+
 			{capturing ? (
 				<CaptureSheet
 					key={capturing.id}
-					title={FIELD_LABEL[capturing.kind]}
+					title={
+						capturing.kind === "initials"
+							? "Add your initials"
+							: "Add your signature"
+					}
 					existing={
 						answers.find((item) => item.fieldId === capturing.id)?.signature
 					}
 					onCancel={() => setCaptureId(null)}
+					onCloseAutoFocus={(event) => {
+						event.preventDefault();
+						control(capturing.id)?.focus({ preventScroll: true });
+					}}
 					onUse={(signature) => {
 						setAnswers((current) =>
 							upsert(current, { fieldId: capturing.id, signature }),
@@ -402,164 +784,244 @@ function Walk({
 					}}
 				/>
 			) : null}
-			<AlertDialog open={declineOpen} onOpenChange={setDeclineOpen}>
-				<AlertDialogContent>
-					<AlertDialogHeader>
-						<AlertDialogTitle>Decline this document?</AlertDialogTitle>
-						<AlertDialogDescription>
-							Signing stops for everyone. Say why you are declining.
-						</AlertDialogDescription>
-					</AlertDialogHeader>
-					<textarea
-						value={reason}
-						maxLength={500}
-						className="min-h-24 w-full rounded-md border border-input px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						onChange={(event) => setReason(event.target.value)}
-					/>
-					<AlertDialogFooter>
-						<AlertDialogCancel>Keep signing</AlertDialogCancel>
-						<AlertDialogAction
-							variant="destructive"
-							disabled={busy || reason.trim().length === 0}
-							onClick={(event) => {
-								event.preventDefault();
-								void decline();
-							}}
-						>
-							Decline
-						</AlertDialogAction>
-					</AlertDialogFooter>
-				</AlertDialogContent>
-			</AlertDialog>
+
+			<ReviewDialog
+				open={reviewOpen}
+				onOpenChange={setReviewOpen}
+				title={view.title}
+				signerName={view.you.name}
+				nextSignerName={nextName}
+				rows={summaryRows(view.fields, answers)}
+				consent={consent}
+				onConsent={setConsent}
+				busy={busy}
+				error={error}
+				onSign={() => void sign()}
+				onDecline={() => {
+					setReviewOpen(false);
+					setDeclineError("");
+					setDeclineOpen(true);
+				}}
+			/>
+			<DeclineDialog
+				open={declineOpen}
+				onOpenChange={setDeclineOpen}
+				senderName={view.sender.name}
+				busy={busy}
+				error={declineError}
+				onDecline={(reason) => void decline(reason)}
+			/>
 		</div>
 	);
 }
 
-function Finished({ context }: { context: SigningContext }) {
-	const [bytes, setBytes] = useState<Uint8Array | null>(null);
-	const [pageCount, setPageCount] = useState(0);
-	const [message, setMessage] = useState("Preparing the signed PDF…");
-	const [frame, setFrame] = useState({ width: 720, height: 900 });
-	const [zoom, setZoom] = useState<SignZoom>({ mode: "percent", percent: 100 });
-	const scrollerRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		const draft = getDraft();
-		const sourceBytes = draft.bytes;
-		const upload = draft.upload;
-		const layout = draft.layout;
-		if (!sourceBytes || !upload || !layout) {
-			setMessage("The prepared PDF is no longer available.");
-			return;
-		}
-		let cancelled = false;
-		void (async () => {
-			const manifest = await buildManifest({
-				fileName: draft.fileName,
-				upload,
-				layout,
-				signers: draft.signers,
-				records: context.records,
-			});
-			const fonts = await loadScriptFonts();
-			const signed = await render(sourceBytes, manifest, {
-				fonts,
-				verifyOrigin: window.location.origin,
-			});
-			if (!cancelled) {
-				setBytes(signed);
-				setMessage("");
-			}
-		})().catch((caught: unknown) => {
-			if (cancelled) return;
-			setMessage(
-				caught instanceof Error
-					? caught.message
-					: "The signed PDF could not be prepared.",
-			);
-		});
-		return () => {
-			cancelled = true;
-		};
-	}, [context]);
-
-	const file = useMemo(() => (bytes ? pdfBlob(bytes) : null), [bytes]);
-
-	useEffect(() => {
-		const node = scrollerRef.current;
-		if (!node) return;
-		const measure = () => {
-			setFrame({
-				width: Math.max(280, node.clientWidth - 48),
-				height: Math.max(280, node.clientHeight - 48),
-			});
-		};
-		measure();
-		const observer = new ResizeObserver(measure);
-		observer.observe(node);
-		return () => observer.disconnect();
-	}, []);
-
+function ProgressBar({
+	progress,
+	className,
+}: {
+	progress: Progress;
+	className?: string;
+}) {
+	const fill = progress.complete ? "bg-success" : "bg-primary";
+	const segmented = progress.total > 0 && progress.total <= SEGMENT_LIMIT;
 	return (
-		<div className="flex h-svh flex-col bg-background">
-			<AppHeader bordered className="justify-start gap-3">
-				<h1 className="text-lg font-semibold text-primary">Document signed</h1>
-				<button
-					type="button"
-					className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
-					disabled={!bytes}
-					onClick={() => {
-						if (bytes) downloadPdf(bytes, context.fileName);
-					}}
-				>
-					Download PDF
-				</button>
-				<ZoomControls zoom={zoom} onZoom={setZoom} />
-				<Link to="/" className="text-sm text-primary">
-					Back home
-				</Link>
-			</AppHeader>
-			{message ? (
-				<p className="px-3 py-3 text-sm text-muted-foreground">{message}</p>
-			) : null}
-			<div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto">
-				{file ? (
-					<Document
-						file={file}
-						suspense={false}
-						loading={null}
-						onLoadSuccess={(loaded) => setPageCount(loaded.numPages)}
-					>
-						<div className="flex flex-col items-center gap-6 px-6 py-6">
-							{Array.from({ length: pageCount }, (_, index) => (
-								<Page
-									key={pageIndexKey(index)}
-									pageNumber={index + 1}
-									width={signedPageWidth(context, index, zoom, frame)}
-									devicePixelRatio={cappedDevicePixelRatio()}
-									renderTextLayer={false}
-									renderAnnotationLayer={false}
-									suspense={false}
-									loading={null}
-								/>
-							))}
-						</div>
-					</Document>
-				) : null}
-			</div>
+		<div
+			role="img"
+			aria-label={progressAlt(progress)}
+			className={cn("flex h-1.5 gap-1.5", className)}
+		>
+			{segmented ? (
+				progress.segments.map((done, index) => (
+					<span
+						// biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and never reorder
+						key={index}
+						className={cn(
+							"h-full flex-1 rounded-full",
+							done ? fill : "bg-border",
+						)}
+					/>
+				))
+			) : (
+				<span className="h-full w-full overflow-hidden rounded-full bg-border">
+					<span
+						className={cn("block h-full rounded-full", fill)}
+						style={{
+							width: `${progress.total === 0 ? 100 : (progress.done / progress.total) * 100}%`,
+						}}
+					/>
+				</span>
+			)}
 		</div>
 	);
 }
 
-function SignerField({
+const STATE_LABEL: Record<FieldState, string> = {
+	todo: "To do",
+	next: "Next",
+	done: "Done",
+};
+
+function fieldLabels(fields: readonly FieldInput[]): Map<string, string> {
+	const total: Record<string, number> = {};
+	const seen: Record<string, number> = {};
+	for (const field of fields) total[field.kind] = (total[field.kind] ?? 0) + 1;
+	const labels = new Map<string, string>();
+	for (const field of fields) {
+		seen[field.kind] = (seen[field.kind] ?? 0) + 1;
+		labels.set(
+			field.id,
+			(total[field.kind] ?? 0) > 1
+				? `${FIELD_LABEL[field.kind]} ${seen[field.kind]}`
+				: FIELD_LABEL[field.kind],
+		);
+	}
+	return labels;
+}
+
+function FieldsPanel({
+	view,
+	progress,
+	answers,
+	onJump,
+}: {
+	view: Ready;
+	progress: Progress;
+	answers: readonly FieldValue[];
+	onJump: (id: string) => void;
+}) {
+	const required = requiredFields(view.fields);
+	const labels = fieldLabels(required);
+	return (
+		<section aria-labelledby="your-fields">
+			<h2
+				id="your-fields"
+				className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+			>
+				Your fields
+			</h2>
+			<ul className="mt-3 flex flex-col gap-2">
+				{required.map((field) => {
+					const state = fieldState(field, progress, answers);
+					return (
+						<li key={field.id}>
+							<button
+								type="button"
+								className={cn(
+									"flex min-h-11 w-full items-center gap-3 rounded-lg border px-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+									state === "next"
+										? "border-primary bg-brand-bg"
+										: "border-border bg-card hover:bg-accent",
+								)}
+								onClick={() => onJump(field.id)}
+							>
+								<span
+									aria-hidden="true"
+									className={cn(
+										"grid size-5 shrink-0 place-items-center rounded-full border-2",
+										state === "done"
+											? "border-success bg-success text-white"
+											: state === "next"
+												? "border-primary"
+												: "border-input",
+									)}
+								>
+									{state === "done" ? (
+										<Check className="size-3" strokeWidth={3} />
+									) : null}
+								</span>
+								<span className="min-w-0 flex-1 truncate font-medium text-foreground">
+									{labels.get(field.id)}
+								</span>
+								<span
+									className={cn(
+										"text-small",
+										state === "next"
+											? "font-medium text-brand-fg"
+											: "text-muted-foreground",
+									)}
+								>
+									{STATE_LABEL[state]}
+								</span>
+							</button>
+						</li>
+					);
+				})}
+			</ul>
+		</section>
+	);
+}
+
+function OrderPanel({ view }: { view: Ready }) {
+	const people = [
+		{ order: view.you.order, name: view.you.name, you: true },
+		...view.others.map((other) => ({
+			order: other.order,
+			name: other.name,
+			you: false,
+		})),
+	].sort((left, right) => left.order - right.order);
+	return (
+		<section aria-labelledby="signing-order">
+			<h2
+				id="signing-order"
+				className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+			>
+				Signing order
+			</h2>
+			<ol className="mt-3 flex flex-col gap-3">
+				{people.map((person) => {
+					const status = person.you
+						? "Signing now"
+						: person.order < view.you.order
+							? "Signed"
+							: "After you";
+					return (
+						<li key={person.order} className="flex items-center gap-3">
+							<span
+								aria-hidden="true"
+								className="grid size-8 shrink-0 place-items-center rounded-full border-2 text-sm font-semibold text-foreground"
+								style={{ borderColor: signerColor(person.order) }}
+							>
+								{person.order}
+							</span>
+							<span className="flex min-w-0 flex-1 items-baseline gap-1 font-medium text-foreground">
+								<span className="truncate">{person.name}</span>
+								{person.you ? (
+									<span className="shrink-0 font-normal text-muted-foreground">
+										(you)
+									</span>
+								) : null}
+							</span>
+							<span
+								className={cn(
+									"text-small",
+									person.you
+										? "font-medium text-brand-fg"
+										: "text-muted-foreground",
+								)}
+							>
+								{status}
+							</span>
+						</li>
+					);
+				})}
+			</ol>
+		</section>
+	);
+}
+
+/** A field on the page. Every kind the signer can act on is a real, focusable control. */
+function FieldBox({
 	field,
 	viewW,
 	viewH,
+	scale,
 	color,
 	name,
 	datePreview,
 	value,
-	focused,
+	state,
+	touch,
 	onSignature,
 	onText,
 	onCheck,
@@ -567,318 +1029,185 @@ function SignerField({
 	field: FieldInput;
 	viewW: number;
 	viewH: number;
+	scale: number;
 	color: string;
 	name: string;
-	datePreview: { text: string; reliable: boolean } | undefined;
+	datePreview: { text: string; reliable: boolean };
 	value: FieldValue | undefined;
-	focused: boolean;
+	state: FieldState;
+	touch: boolean;
 	onSignature: () => void;
 	onText: (text: string) => void;
 	onCheck: (checked: boolean) => void;
 }) {
-	const box = {
+	const filled = state === "done";
+	const heightPx = (field.h / 1_000_000) * viewH * scale;
+	const textSize = Math.max(11, Math.min(18, heightPx * 0.42));
+	const prompt = (kind: "sign" | "type") =>
+		`${touch ? "Tap" : "Click"} to ${kind}`;
+	const style: CSSProperties = {
+		borderColor: color,
+		borderStyle: !field.required && !filled ? "dashed" : "solid",
+		borderWidth: filled || !field.required ? 1.5 : 2,
+		background: `color-mix(in oklab, ${color} ${filled ? 6 : field.required ? 10 : 5}%, transparent)`,
+		boxShadow:
+			state === "next"
+				? "0 0 0 2px var(--card), 0 0 0 4px var(--primary)"
+				: undefined,
+		fontSize: textSize,
+	};
+	const hit =
+		"relative before:absolute before:top-1/2 before:left-1/2 before:size-full before:min-h-11 before:min-w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-['']";
+	const focusRing =
+		"outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-2";
+	const readOnly = field.kind === "date_signed" || field.kind === "full_name";
+
+	return (
+		<div
+			data-field-id={field.id}
+			className="absolute z-20"
+			style={boxStyle(field)}
+		>
+			{state === "next" ? (
+				<span
+					aria-hidden="true"
+					className="absolute -top-7 left-0 inline-flex items-center gap-0.5 rounded-full bg-primary px-2.5 py-0.5 text-xs font-semibold text-primary-foreground"
+				>
+					Next
+					<ChevronDown className="size-3.5" strokeWidth={2.5} />
+				</span>
+			) : null}
+			{field.required && !filled && !readOnly ? (
+				<Asterisk
+					aria-hidden
+					className="pointer-events-none absolute top-0.5 right-1 z-10 size-3"
+					color={color}
+				/>
+			) : null}
+
+			{field.kind === "signature" || field.kind === "initials" ? (
+				<button
+					type="button"
+					data-control
+					aria-label={`${FIELD_LABEL[field.kind]}${field.required ? ", required" : ""}${filled ? ", filled in" : ""}`}
+					className={cn(
+						hit,
+						focusRing,
+						"flex h-full w-full cursor-pointer items-center justify-center rounded-sm border text-foreground",
+					)}
+					style={style}
+					onClick={onSignature}
+				>
+					<span className="absolute inset-0 overflow-hidden">
+						{value?.signature ? (
+							<InkGraphic
+								field={field}
+								value={value}
+								viewW={viewW}
+								viewH={viewH}
+							/>
+						) : (
+							<span className="flex h-full items-center justify-center">
+								{prompt("sign")}
+							</span>
+						)}
+					</span>
+				</button>
+			) : null}
+
+			{field.kind === "text" ? (
+				<label className={cn(hit, "block h-full w-full")}>
+					<span className="sr-only">
+						{FIELD_LABEL.text}
+						{field.required ? ", required" : ""}
+					</span>
+					<input
+						data-control
+						value={value?.text ?? ""}
+						maxLength={limits.textFieldChars}
+						placeholder={prompt("type")}
+						className={cn(
+							focusRing,
+							"h-full w-full rounded-sm border bg-transparent px-1 text-center text-foreground placeholder:text-foreground",
+						)}
+						style={style}
+						onChange={(event) => onText(event.target.value)}
+					/>
+				</label>
+			) : null}
+
+			{field.kind === "checkbox" ? (
+				<button
+					type="button"
+					data-control
+					aria-pressed={value?.checked === true}
+					aria-label={`${FIELD_LABEL.checkbox}${field.required ? ", required" : ""}`}
+					className={cn(
+						hit,
+						focusRing,
+						"flex h-full w-full cursor-pointer items-center justify-center rounded-sm border text-foreground",
+					)}
+					style={style}
+					onClick={() => onCheck(value?.checked !== true)}
+				>
+					<span className="absolute inset-0">
+						{value?.checked ? (
+							<InkGraphic
+								field={field}
+								value={value}
+								viewW={viewW}
+								viewH={viewH}
+							/>
+						) : null}
+					</span>
+				</button>
+			) : null}
+
+			{readOnly ? (
+				<p
+					className="flex h-full w-full items-center justify-center overflow-hidden rounded-sm bg-muted px-1 text-muted-foreground"
+					style={{ fontSize: textSize }}
+				>
+					<span className="min-w-0 truncate">
+						{field.kind === "full_name"
+							? name || "Signer"
+							: datePreview.reliable
+								? datePreview.text
+								: "Filled in when you sign"}
+					</span>
+				</p>
+			) : null}
+		</div>
+	);
+}
+
+function boxStyle(field: FieldInput): CSSProperties {
+	return {
 		left: `${microToPercent(field.x)}%`,
 		top: `${microToPercent(field.y)}%`,
 		width: `${microToPercent(field.w)}%`,
 		height: `${microToPercent(field.h)}%`,
 	};
-	const chrome = {
-		borderColor: color,
-		borderStyle: field.required ? "solid" : "dashed",
-		borderWidth: focused ? 2 : 1,
-		background: "color-mix(in oklab, var(--card) 35%, transparent)",
-	} as const;
-
-	return (
-		<div data-field-id={field.id} className="absolute z-20" style={box}>
-			{field.required ? (
-				<Asterisk
-					aria-hidden
-					className="absolute -top-2 -right-2 size-3"
-					color={color}
-				/>
-			) : null}
-			{field.kind === "signature" || field.kind === "initials" ? (
-				<button
-					type="button"
-					className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-sm border text-xs text-foreground"
-					style={chrome}
-					onClick={onSignature}
-				>
-					{value?.signature ? (
-						<FieldInk field={field} value={value} viewW={viewW} viewH={viewH} />
-					) : (
-						FIELD_LABEL[field.kind]
-					)}
-				</button>
-			) : null}
-			{field.kind === "text" ? (
-				<input
-					aria-label={FIELD_LABEL[field.kind]}
-					value={value?.text ?? ""}
-					maxLength={limits.textFieldChars}
-					className="h-full w-full rounded-sm border px-1 text-center text-xs text-foreground outline-none"
-					style={chrome}
-					onFocus={(event) => {
-						const length = event.currentTarget.value.length;
-						event.currentTarget.setSelectionRange(length, length);
-					}}
-					onChange={(event) => onText(event.target.value)}
-				/>
-			) : null}
-			{field.kind === "checkbox" ? (
-				<button
-					type="button"
-					aria-pressed={value?.checked === true}
-					aria-label={FIELD_LABEL[field.kind]}
-					className="flex h-full w-full items-center justify-center rounded-sm border"
-					style={chrome}
-					onClick={() => onCheck(value?.checked !== true)}
-				>
-					{value?.checked ? (
-						<FieldInk field={field} value={value} viewW={viewW} viewH={viewH} />
-					) : null}
-				</button>
-			) : null}
-			{field.kind === "full_name" ? (
-				<p
-					className="flex h-full w-full items-center justify-center overflow-hidden rounded-sm border px-1 text-xs text-foreground"
-					style={chrome}
-				>
-					{name || "Signer"}
-				</p>
-			) : null}
-			{field.kind === "date_signed" ? (
-				<p
-					className="flex h-full w-full items-center justify-center overflow-hidden rounded-sm border px-1 text-center text-[10px] text-muted-foreground"
-					style={chrome}
-				>
-					{datePreview?.reliable ? datePreview.text : "Filled in when you sign"}
-				</p>
-			) : null}
-		</div>
-	);
 }
 
-function FieldInk({
-	field,
-	value,
-	viewW,
-	viewH,
-}: {
-	field: FieldInput;
-	value: FieldValue;
-	viewW: number;
-	viewH: number;
-}) {
-	return <InkGraphic field={field} value={value} viewW={viewW} viewH={viewH} />;
-}
-
-function PriorInk({
-	field,
-	value,
-	viewW,
-	viewH,
-}: {
-	field: FieldInput;
-	value: FieldValue;
-	viewW: number;
-	viewH: number;
-}) {
-	return (
-		<div
-			className="absolute"
-			style={{
-				left: `${microToPercent(field.x)}%`,
-				top: `${microToPercent(field.y)}%`,
-				width: `${microToPercent(field.w)}%`,
-				height: `${microToPercent(field.h)}%`,
-			}}
-		>
-			<InkGraphic field={field} value={value} viewW={viewW} viewH={viewH} />
-		</div>
-	);
-}
-
-function InkGraphic({
-	field,
-	value,
-	viewW,
-	viewH,
-}: {
-	field: FieldInput;
-	value: FieldValue;
-	viewW: number;
-	viewH: number;
-}) {
-	if (value.signature?.kind === "drawn") {
-		const fieldW = Math.max(1, (field.w / 1_000_000) * viewW);
-		const fieldH = Math.max(1, (field.h / 1_000_000) * viewH);
-		const groups = inkFractions(
-			value.signature.box,
-			unpackStrokes(value.signature.strokes),
-			fieldW,
-			fieldH,
-		);
-		const stroke = inkStrokeWidth(value.signature.box, fieldW, fieldH);
-		return (
-			<svg
-				viewBox={`0 0 ${fieldW} ${fieldH}`}
-				className="h-full w-full"
-				aria-hidden
-			>
-				<title>Signature</title>
-				{groups.map((group) => (
-					<polyline
-						key={group.map((point) => `${point.x},${point.y}`).join(" ")}
-						points={group
-							.map((point) => `${point.x * fieldW},${point.y * fieldH}`)
-							.join(" ")}
-						fill="none"
-						stroke="currentColor"
-						strokeWidth={stroke}
-						strokeLinecap="round"
-						strokeLinejoin="round"
-					/>
-				))}
-			</svg>
-		);
-	}
-	if (value.signature?.kind === "typed") {
-		return (
-			<FittedScript
-				text={value.signature.text}
-				family={SCRIPT_FACE[value.signature.font].family}
-				className="absolute inset-0 text-foreground"
-			/>
-		);
-	}
-	if (value.checked) {
-		const points = checkFractions()
-			.map((point) => `${point.x},${point.y}`)
-			.join(" ");
-		return (
-			<svg viewBox="0 0 1 1" className="h-full w-full" aria-hidden>
-				<title>Checkmark</title>
-				<polyline
-					points={points}
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="0.12"
-					strokeLinecap="round"
-					strokeLinejoin="round"
-				/>
-			</svg>
-		);
-	}
-	if (value.text) {
-		return (
-			<p className="flex h-full w-full items-center justify-center overflow-hidden px-1 text-center text-xs text-foreground">
-				{value.text}
-			</p>
-		);
-	}
-	return null;
-}
-
-function fieldFilled(
-	field: FieldInput,
-	values: readonly FieldValue[],
-): boolean {
-	if (field.kind === "date_signed" || field.kind === "full_name") return true;
-	const value = values.find((item) => item.fieldId === field.id);
-	if (!value) return false;
-	if (field.kind === "signature" || field.kind === "initials") {
-		return value.signature !== undefined;
-	}
-	if (field.kind === "checkbox") return value.checked === true;
-	return (value.text ?? "").trim().length > 0;
+function signerColor(order: number): string {
+	return `var(--signer-${((order - 1) % 6) + 1})`;
 }
 
 function upsert(values: readonly FieldValue[], next: FieldValue): FieldValue[] {
-	const rest = values.filter((item) => item.fieldId !== next.fieldId);
-	return [...rest, next];
-}
-
-const ZOOM_PERCENTS = [50, 75, 100, 125, 150, 200] as const;
-const CSS_PX_PER_PT = 96 / 72;
-
-type SignZoom =
-	| { mode: "fit-width" }
-	| { mode: "fit-page" }
-	| { mode: "percent"; percent: number };
-
-function ZoomControls({
-	zoom,
-	onZoom,
-}: {
-	zoom: SignZoom;
-	onZoom: (zoom: SignZoom) => void;
-}) {
-	return (
-		<div className="flex items-center gap-1">
-			<button
-				type="button"
-				aria-pressed={zoom.mode === "fit-width"}
-				className="rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent aria-pressed:bg-secondary"
-				onClick={() => onZoom({ mode: "fit-width" })}
-			>
-				Fit width
-			</button>
-			<button
-				type="button"
-				aria-pressed={zoom.mode === "fit-page"}
-				className="rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent aria-pressed:bg-secondary"
-				onClick={() => onZoom({ mode: "fit-page" })}
-			>
-				Fit page
-			</button>
-			<label className="text-sm text-foreground">
-				<span className="sr-only">Zoom</span>
-				<select
-					className="rounded-md border border-border bg-background px-2 py-1"
-					value={zoom.mode === "percent" ? String(zoom.percent) : ""}
-					onChange={(event) =>
-						onZoom({
-							mode: "percent",
-							percent: Number(event.target.value),
-						})
-					}
-				>
-					<option value="" disabled>
-						Zoom
-					</option>
-					{ZOOM_PERCENTS.map((percent) => (
-						<option key={percent} value={percent}>
-							{percent}%
-						</option>
-					))}
-				</select>
-			</label>
-		</div>
-	);
+	return [...values.filter((item) => item.fieldId !== next.fieldId), next];
 }
 
 function pagePixels(
 	viewW: number,
 	viewH: number,
-	zoom: SignZoom,
-	frame: { width: number; height: number },
+	zoom: Zoom,
+	frameWidth: number,
 ): { width: number; height: number } {
 	if (!(viewW > 0) || !(viewH > 0)) return { width: 1, height: 1 };
-	if (zoom.mode === "fit-width") {
-		const width = Math.max(1, Math.floor(frame.width));
-		return {
-			width,
-			height: Math.max(1, Math.floor(width * (viewH / viewW))),
-		};
-	}
-	if (zoom.mode === "fit-page") {
-		const scale = Math.min(frame.width / viewW, frame.height / viewH);
-		return {
-			width: Math.max(1, Math.floor(viewW * scale)),
-			height: Math.max(1, Math.floor(viewH * scale)),
-		};
+	if (zoom.mode === "fit") {
+		const width = Math.max(1, Math.floor(frameWidth));
+		return { width, height: Math.max(1, Math.floor(width * (viewH / viewW))) };
 	}
 	const factor = CSS_PX_PER_PT * (zoom.percent / 100);
 	return {
@@ -887,19 +1216,7 @@ function pagePixels(
 	};
 }
 
-function signedPageWidth(
-	context: SigningContext,
-	index: number,
-	zoom: SignZoom,
-	frame: { width: number; height: number },
-): number {
-	const page = context.upload.geometry[index];
-	if (!page) return pagePixels(612, 792, zoom, frame).width;
-	const { viewW, viewH } = viewSize(page);
-	return pagePixels(viewW, viewH, zoom, frame).width;
-}
-
-function pageIndexKey(index: number): string {
+function pageKey(index: number): string {
 	return `sign-page-${index}`;
 }
 
@@ -912,14 +1229,4 @@ function pdfBlob(bytes: Uint8Array): Blob {
 	const copy = new ArrayBuffer(bytes.byteLength);
 	new Uint8Array(copy).set(bytes);
 	return new Blob([copy], { type: "application/pdf" });
-}
-
-function downloadPdf(bytes: Uint8Array, fileName: string): void {
-	const blob = pdfBlob(bytes);
-	const url = URL.createObjectURL(blob);
-	const link = document.createElement("a");
-	link.href = url;
-	link.download = `${fileName.replace(/\.pdf$/i, "")}-signed.pdf`;
-	link.click();
-	URL.revokeObjectURL(url);
 }

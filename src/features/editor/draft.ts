@@ -1,8 +1,4 @@
-import type {
-	SaveLayoutInput,
-	SubmitSignatureInput,
-	UploadInit,
-} from "#/core/contracts/index.ts";
+import type { SaveLayoutInput, UploadInit } from "#/core/contracts/index.ts";
 import {
 	saveLayoutInputSchema,
 	uploadInitSchema,
@@ -10,10 +6,6 @@ import {
 import { sha256Hex } from "#/core/hash.ts";
 import { ulid } from "#/core/ulid.ts";
 import { type EditorSigner, SIGNER_COLORS } from "#/features/editor/reducer.ts";
-import type {
-	RestingContext,
-	SigningContext,
-} from "#/features/sign/session.ts";
 import { readUpload } from "#/pdf/load.ts";
 import {
 	createDraftFn,
@@ -23,11 +15,6 @@ import {
 	reissueInviteFn,
 	savePreparationFn,
 } from "#/server/documents.ts";
-import {
-	declineSignatureFn,
-	getSigningContextFn,
-	submitSignatureFn,
-} from "#/server/signing.ts";
 
 const STORAGE_KEY = "digisign.prepare.v1";
 
@@ -247,121 +234,6 @@ export async function reissueInvite(
 	signerId: string,
 ): Promise<{ ok: true } | { error: string }> {
 	return reissueInviteFn({ data: { signerId } });
-}
-
-export async function getSigningContext(): Promise<
-	SigningContext | RestingContext | { error: string }
-> {
-	const result = await getSigningContextFn();
-	if ("error" in result) return result;
-	const resting = {
-		status: "resting" as const,
-		title: result.title,
-		you: {
-			name: result.you.name,
-			email: result.you.email,
-			order: result.you.order,
-		},
-		count: result.count,
-	};
-	switch (result.kind) {
-		case "signed-waiting":
-			return {
-				...resting,
-				view: {
-					kind: "signed-waiting",
-					signedAt: result.signedAt,
-					nextSignerName: result.nextSignerName,
-				},
-			};
-		case "declined-by-you":
-			return {
-				...resting,
-				view: {
-					kind: "declined-by-you",
-					reason: result.reason,
-					declinedAt: result.declinedAt,
-				},
-			};
-		case "stopped":
-		case "voided":
-		case "expired":
-			return { ...resting, view: { kind: result.kind } };
-		case "ready":
-		case "completed":
-			break;
-	}
-	const response = await fetch(
-		`/files/documents/${result.upload.documentId}/source`,
-	);
-	if (!response.ok) return { error: "The PDF could not be loaded." };
-	const bytes = new Uint8Array(await response.arrayBuffer());
-	const digest = await sha256Hex(bytes);
-	if (digest !== result.upload.sha256) {
-		return {
-			error: "This file no longer matches the document that was prepared.",
-		};
-	}
-	// Other signers arrive as { order, name, status } only. Their ids and emails stay on the server.
-	const people = [
-		{
-			order: result.you.order,
-			id: result.you.id,
-			name: result.you.name,
-			email: result.you.email,
-		},
-		...result.others.map((other) => ({
-			order: other.order,
-			id: `signer-${other.order}`,
-			name: other.name,
-			email: "",
-		})),
-	].sort((left, right) => left.order - right.order);
-	const signers = people.map(({ id, name, email }, index) => ({
-		id,
-		name,
-		email,
-		color: SIGNER_COLORS[index % SIGNER_COLORS.length] ?? SIGNER_COLORS[0],
-	}));
-	draft = {
-		fileName: result.fileName,
-		bytes,
-		upload: result.upload,
-		signers,
-		layout: result.layout,
-	};
-	const signer = signers.find((item) => item.id === result.you.id);
-	if (!signer) return { error: "This document has no signer." };
-	return {
-		status: result.kind === "completed" ? "completed" : "signing",
-		declineReason: null,
-		signer,
-		signerIndex: result.you.order - 1,
-		signerCount: result.count,
-		fields: result.kind === "ready" ? result.fields : [],
-		records: result.records,
-		stateHash: result.stateHash,
-		upload: result.upload,
-		layout: result.layout,
-		fileName: result.fileName,
-		dateSigned: result.dateSigned,
-	};
-}
-
-export async function submitSignature(
-	body: SubmitSignatureInput,
-): Promise<SigningContext | RestingContext | { error: string }> {
-	const result = await submitSignatureFn({ data: body });
-	if ("error" in result) return result;
-	return getSigningContext();
-}
-
-export async function declineSignature(
-	reason: string,
-): Promise<SigningContext | RestingContext | { error: string }> {
-	const result = await declineSignatureFn({ data: { reason } });
-	if ("error" in result) return result;
-	return getSigningContext();
 }
 
 export function saveSigners(signers: readonly EditorSigner[]): void {

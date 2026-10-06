@@ -68,6 +68,7 @@ export type OtherSigner = { order: number; name: string; status: SignerStatus };
 export type DatePreview = { text: string; reliable: boolean };
 
 type ViewBase = {
+	documentId: string;
 	title: string;
 	/** The document owner, who sent it. */
 	sender: { name: string; email: string };
@@ -116,6 +117,12 @@ export type SigningView = ViewBase &
 		| { kind: "voided" }
 		| { kind: "expired" }
 	);
+
+/** What a signature submit returns. `signedAt` is the server time written into the record. */
+export type SubmitResult = {
+	status: "signed" | "completed";
+	signedAt: number;
+};
 
 export type SigningViewKind = SigningView["kind"];
 
@@ -266,7 +273,12 @@ export async function peekInvite(input: {
 		nextSignerName:
 			people.find((person) => person.order > signer.signingOrder)?.name ?? null,
 		requiredFieldCount: layout.fields.filter(
-			(field) => field.signerId === signer.id && field.required,
+			(field) =>
+				field.signerId === signer.id &&
+				field.required &&
+				// The date and the name fill themselves in, so the signer has nothing to do for them.
+				field.kind !== "date_signed" &&
+				field.kind !== "full_name",
 		).length,
 		expiresAt: Math.min(
 			found.token.expiresAt,
@@ -319,7 +331,7 @@ export async function submitSignature(input: {
 	userAgent: string;
 	origin: string;
 	now?: number;
-}): Promise<{ status: "signed" | "completed" }> {
+}): Promise<SubmitResult> {
 	const now = input.now ?? Date.now();
 	const encoded = canonicalJson(input.body);
 	if (encoded.length > limits.requestBodyBytes) {
@@ -444,8 +456,9 @@ export async function submitSignature(input: {
 			prev: { seq: signedAudit.seq, hash: signedAudit.hash },
 		});
 	}
-	const response = {
-		status: last ? ("completed" as const) : ("signed" as const),
+	const response: SubmitResult = {
+		status: last ? "completed" : "signed",
+		signedAt: now,
 	};
 	const db = getDb();
 	const result = await commitOrReplay({
@@ -734,6 +747,7 @@ async function buildView(
 		.orderBy(asc(signers.signingOrder));
 	const owner = await ownerContact(document.ownerId);
 	const base: ViewBase = {
+		documentId: document.id,
 		title: document.title,
 		sender: { name: owner?.name ?? "", email: owner?.email ?? "" },
 		you: {
@@ -928,7 +942,7 @@ async function replayIdempotency(
 	actorKey: string,
 	key: string,
 	requestSha256: string,
-): Promise<{ status: "signed" | "completed" } | null> {
+): Promise<SubmitResult | null> {
 	const [row] = await getDb()
 		.select()
 		.from(idempotencyKeys)
@@ -943,7 +957,7 @@ async function replayIdempotency(
 			"This request was already sent with different details.",
 		);
 	}
-	return JSON.parse(row.responseJson) as { status: "signed" | "completed" };
+	return JSON.parse(row.responseJson) as SubmitResult;
 }
 
 function readGeometry(geometryJson: string | null): PageGeometryInput[] {

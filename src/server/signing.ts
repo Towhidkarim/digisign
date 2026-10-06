@@ -96,17 +96,22 @@ export const declineSignatureFn = createServerFn({ method: "POST" })
 
 async function settle<T>(
 	run: () => Promise<T>,
-): Promise<T | { error: string; reason?: InviteReason }> {
+): Promise<T | { error: string; reason?: InviteReason | "session" }> {
 	try {
 		return await run();
 	} catch (error) {
 		if (error instanceof Error && error.message.startsWith("Open the invite")) {
-			return { error: error.message };
+			return { error: error.message, reason: "session" as const };
 		}
 		if (isInviteLinkError(error)) {
 			return { error: error.message, reason: error.reason };
 		}
-		if (isAppError(error)) return { error: error.message };
+		// openSession throws a 401 when the cookie is missing or the session has lapsed.
+		if (isAppError(error)) {
+			return error.status === 401
+				? { error: error.message, reason: "session" as const }
+				: { error: error.message };
+		}
 		throw error;
 	}
 }

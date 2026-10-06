@@ -1,6 +1,7 @@
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui";
 import type * as React from "react";
 import { Button } from "#/components/ui/button.tsx";
+import { useReturnFocus } from "#/hooks/use-return-focus.ts";
 import { cn } from "#/lib/utils.ts";
 
 function AlertDialog({
@@ -44,10 +45,15 @@ function AlertDialogOverlay({
 function AlertDialogContent({
 	className,
 	size = "default",
+	sheet = false,
+	onCloseAutoFocus,
 	...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
 	size?: "default" | "sm";
+	/** A bottom sheet below 768px, a centred dialog from 768px. */
+	sheet?: boolean;
 }) {
+	const returnFocus = useReturnFocus(onCloseAutoFocus);
 	return (
 		<AlertDialogPortal>
 			<AlertDialogOverlay />
@@ -56,8 +62,12 @@ function AlertDialogContent({
 				data-size={size}
 				className={cn(
 					"group/alert-dialog-content fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 data-[size=sm]:max-w-xs data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[size=default]:sm:max-w-lg",
+					sheet &&
+						"max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-h-[92dvh] max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-t-2xl max-md:rounded-b-none max-md:data-[state=closed]:slide-out-to-bottom max-md:data-[state=open]:slide-in-from-bottom",
 					className,
 				)}
+				aria-modal="true"
+				onCloseAutoFocus={returnFocus}
 				{...props}
 			/>
 		</AlertDialogPortal>

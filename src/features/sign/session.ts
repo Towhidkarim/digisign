@@ -50,28 +50,6 @@ export type SigningContext = {
 	dateSigned?: { text: string; reliable: boolean };
 };
 
-/** A signer who is no longer waiting: signed, declined, or the document stopped. */
-export type RestingContext = {
-	status: "resting";
-	title: string;
-	you: { name: string; email: string; order: number };
-	count: number;
-	view:
-		| {
-				kind: "signed-waiting";
-				signedAt: number;
-				nextSignerName: string | null;
-		  }
-		| {
-				kind: "declined-by-you";
-				reason: string | null;
-				declinedAt: number | null;
-		  }
-		| { kind: "stopped" }
-		| { kind: "voided" }
-		| { kind: "expired" };
-};
-
 let session: SigningSession | null = null;
 
 export function resetSigning(documentId: string): void {

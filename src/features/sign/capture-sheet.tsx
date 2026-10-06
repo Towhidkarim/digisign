@@ -1,10 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { RadioGroup } from "radix-ui";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SignaturePad from "signature_pad";
 
-import type { SignatureInput } from "#/core/contracts/index.ts";
+import { Button } from "#/components/ui/button.tsx";
+import { Dialog, DialogContent, DialogTitle } from "#/components/ui/dialog.tsx";
+import { Input } from "#/components/ui/input.tsx";
+import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "#/components/ui/tabs.tsx";
+import {
+	type SignatureInput,
+	signatureInputSchema,
+} from "#/core/contracts/index.ts";
 import { limits } from "#/core/limits.ts";
 import {
-	CAPTURE_BOX,
 	drawnSignature,
 	pointsToStrokes,
 	type ScriptFont,
@@ -13,30 +25,42 @@ import {
 	unpackStrokes,
 } from "#/features/sign/capture.ts";
 import { FittedScript } from "#/features/sign/fitted-script.tsx";
+import { SignatureImage } from "#/features/sign/ink-graphic.tsx";
 import {
 	forgetSignature,
 	loadSavedSignature,
 	rememberSignature,
 } from "#/features/sign/saved-signature.ts";
+import { useMediaQuery } from "#/hooks/use-media-query.ts";
+import { cn } from "#/lib/utils.ts";
 import { installScriptFaces, SCRIPT_FACE } from "#/pdf/fonts.ts";
 
-/** The pen follows the pad's text color, which stays dark ink on white paper in either theme. */
+type Mode = "drawn" | "typed" | "saved";
+
+/** The pen follows the pad's text colour, which stays dark ink on white paper in either theme. */
 function ink(frame: HTMLElement): string {
 	return getComputedStyle(frame).color;
 }
 
+const TOO_BIG =
+	"That drawing is too long or too detailed. Clear it and draw a shorter one.";
+
 export function CaptureSheet({
-	title,
+	title = "Add your signature",
 	existing,
 	onCancel,
 	onUse,
+	onCloseAutoFocus,
 }: {
-	title: string;
+	title?: string;
 	existing?: SignatureInput;
 	onCancel: () => void;
 	onUse: (signature: SignatureInput) => void;
+	/** Lets the page put focus back on the exact field that opened the sheet. */
+	onCloseAutoFocus?: (event: Event) => void;
 }) {
-	const [mode, setMode] = useState<"drawn" | "typed">(
+	const [saved] = useState<SignatureInput | null>(() => loadSavedSignature());
+	const [mode, setMode] = useState<Mode>(
 		existing?.kind === "typed" ? "typed" : "drawn",
 	);
 	const [typed, setTyped] = useState(
@@ -45,16 +69,16 @@ export function CaptureSheet({
 	const [font, setFont] = useState<ScriptFont>(
 		existing?.kind === "typed" ? existing.font : "script-1",
 	);
-	const [drawnSeed, setDrawnSeed] = useState<string | null>(
+	const [drawn, setDrawn] = useState<string | null>(
 		existing?.kind === "drawn" ? existing.strokes : null,
 	);
-	const [saved, setSaved] = useState<SignatureInput | null>(null);
+	const [savedGone, setSavedGone] = useState(false);
 	const [remember, setRemember] = useState(false);
 	const [error, setError] = useState("");
 	const [fontsReady, setFontsReady] = useState(false);
+	const hasSaved = saved !== null && !savedGone;
 
 	useEffect(() => {
-		setSaved(loadSavedSignature());
 		let cancelled = false;
 		void installScriptFaces().then(() => {
 			if (!cancelled) setFontsReady(true);
@@ -64,172 +88,279 @@ export function CaptureSheet({
 		};
 	}, []);
 
-	function accept(signature: SignatureInput) {
-		if (remember) rememberSignature(signature);
-		onUse(signature);
+	const valid =
+		mode === "drawn"
+			? drawn !== null
+			: mode === "typed"
+				? typed.trim().length > 0
+				: hasSaved;
+
+	function candidate(): SignatureInput | null {
+		if (mode === "drawn") {
+			return drawn
+				? {
+						kind: "drawn",
+						box: { w: 9000, h: 3000 },
+						strokes: drawn,
+					}
+				: null;
+		}
+		if (mode === "typed") {
+			return typed.trim() ? typedSignature(typed, font) : null;
+		}
+		return hasSaved ? saved : null;
 	}
 
-	function fillFromSaved(signature: SignatureInput) {
-		if (signature.kind === "typed") {
-			setMode("typed");
-			setTyped(signature.text);
-			setFont(signature.font);
+	function accept() {
+		const signature = candidate();
+		if (!signature) {
+			setError(
+				mode === "drawn"
+					? "Draw a signature first."
+					: mode === "typed"
+						? "Type your name first."
+						: "There is no saved signature.",
+			);
 			return;
 		}
-		setMode("drawn");
-		setDrawnSeed(signature.strokes);
+		const checked = signatureInputSchema.safeParse(signature);
+		if (!checked.success) {
+			setError(
+				mode === "drawn" ? TOO_BIG : "That signature could not be used.",
+			);
+			return;
+		}
+		if (remember && mode !== "saved") rememberSignature(checked.data);
+		onUse(checked.data);
 	}
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim p-4 sm:items-center">
-			<div className="flex w-full max-w-xl flex-col gap-4 rounded-xl bg-card p-4 text-card-foreground shadow-lg">
-				<div className="flex items-center justify-between gap-3">
-					<h2 className="text-lg font-semibold text-primary">{title}</h2>
-					<button
-						type="button"
-						className="text-sm text-muted-foreground hover:underline"
-						onClick={onCancel}
+		<Dialog open onOpenChange={(open) => !open && onCancel()}>
+			<DialogContent
+				sheet
+				aria-describedby={undefined}
+				className="gap-4 p-4 sm:p-6 md:max-w-xl"
+				onCloseAutoFocus={onCloseAutoFocus}
+				closeLabel="Close"
+			>
+				<div
+					aria-hidden="true"
+					className="mx-auto -mt-1 h-1 w-10 rounded-full bg-border md:hidden"
+				/>
+				<DialogTitle>{title}</DialogTitle>
+				<Tabs
+					value={mode}
+					onValueChange={(next) => {
+						setMode(next as Mode);
+						setError("");
+					}}
+				>
+					<TabsList
+						aria-label="How to add it"
+						className="grid w-full auto-cols-fr grid-flow-col gap-1 rounded-lg bg-muted p-1"
 					>
-						Cancel
-					</button>
-				</div>
-				<div className="flex gap-2">
-					<button
-						type="button"
-						aria-pressed={mode === "drawn"}
-						className="rounded-md px-3 py-1.5 text-sm aria-pressed:bg-accent"
-						onClick={() => setMode("drawn")}
-					>
-						Draw
-					</button>
-					<button
-						type="button"
-						aria-pressed={mode === "typed"}
-						className="rounded-md px-3 py-1.5 text-sm aria-pressed:bg-accent"
-						onClick={() => setMode("typed")}
-					>
-						Type
-					</button>
-				</div>
-				{saved ? (
-					<div className="flex flex-wrap items-center gap-2 text-sm">
-						<button
-							type="button"
-							className="rounded-md border border-input px-3 py-1.5"
-							onClick={() => fillFromSaved(saved)}
-						>
-							Use saved signature
-						</button>
-						<button
-							type="button"
-							className="text-muted-foreground hover:underline"
-							onClick={() => {
-								forgetSignature();
-								setSaved(null);
+						{(
+							[
+								["drawn", "Draw"],
+								["typed", "Type"],
+								...(hasSaved ? [["saved", "Saved"]] : []),
+							] as [Mode, string][]
+						).map(([value, label]) => (
+							<TabsTrigger
+								key={value}
+								value={value}
+								className="min-h-11 justify-center data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+							>
+								{label}
+							</TabsTrigger>
+						))}
+					</TabsList>
+
+					<TabsContent value="drawn" className="mt-3">
+						<DrawPad
+							seed={drawn}
+							onInk={(packed) => {
+								setDrawn(packed);
+								setError("");
 							}}
-						>
-							Forget
-						</button>
-					</div>
-				) : null}
-				{mode === "drawn" ? (
-					<DrawPad
-						seed={drawnSeed}
-						onUse={(signature) => accept(signature)}
-						onError={setError}
-					/>
-				) : (
-					<div className="flex flex-col gap-3">
-						<input
-							value={typed}
-							maxLength={limits.typedSignatureChars}
-							placeholder="Type your name"
-							className="h-12 rounded-md border border-input px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
-							onChange={(event) => setTyped(event.target.value)}
+							onError={setError}
 						/>
-						<div
-							className="on-paper relative aspect-[3/1] w-full rounded-md border border-input bg-card text-foreground"
-							aria-live="polite"
-						>
-							<FittedScript
-								text={typed.trim() || "Your signature"}
-								family={
-									fontsReady ? SCRIPT_FACE[font].family : "var(--font-sans)"
-								}
-								className={`absolute inset-0 px-4 py-3 ${typed.trim() ? "text-foreground" : "text-muted-foreground"}`}
-							/>
-						</div>
-						<div
-							className="grid grid-cols-2 gap-2"
-							role="listbox"
-							aria-label="Signature font"
-						>
-							{(Object.keys(SCRIPT_FACE) as ScriptFont[]).map((name) => (
-								<button
-									key={name}
-									type="button"
-									role="option"
-									aria-selected={font === name}
-									className="relative h-14 overflow-hidden rounded-md border border-input aria-selected:border-primary aria-selected:bg-accent"
-									onClick={() => setFont(name)}
-								>
-									<FittedScript
-										text={typed.trim() || SCRIPT_FACE[name].label}
-										family={
-											fontsReady ? SCRIPT_FACE[name].family : "var(--font-sans)"
-										}
-										className="absolute inset-0 px-3 py-2 text-foreground"
-									/>
-								</button>
-							))}
-						</div>
-						<button
-							type="button"
-							className="self-start rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
-							disabled={typed.trim().length === 0}
-							onClick={() => {
-								try {
-									accept(typedSignature(typed, font));
-								} catch (caught) {
-									setError(
-										caught instanceof Error
-											? caught.message
-											: "That signature could not be saved.",
-									);
-								}
+					</TabsContent>
+					<TabsContent value="typed" className="mt-3">
+						<TypePad
+							typed={typed}
+							font={font}
+							fontsReady={fontsReady}
+							onTyped={(value) => {
+								setTyped(value);
+								setError("");
 							}}
-						>
-							Use this signature
-						</button>
-					</div>
-				)}
-				<label className="flex items-center gap-2 text-sm text-foreground">
-					<input
-						type="checkbox"
-						checked={remember}
-						onChange={(event) => setRemember(event.target.checked)}
-					/>
-					Remember on this device
-				</label>
-				{error ? <p className="text-sm text-destructive">{error}</p> : null}
+							onFont={setFont}
+						/>
+					</TabsContent>
+					{saved ? (
+						<TabsContent value="saved" className="mt-3">
+							<div className="flex flex-col gap-3">
+								<div className="on-paper flex aspect-3/1 w-full items-center justify-center rounded-lg border border-input bg-card p-3 text-foreground">
+									<SignatureImage signature={saved} className="h-full w-full" />
+								</div>
+								<button
+									type="button"
+									className="self-start text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground max-sm:min-h-11"
+									onClick={() => {
+										forgetSignature();
+										setSavedGone(true);
+										setMode("drawn");
+									}}
+								>
+									Forget saved signature
+								</button>
+							</div>
+						</TabsContent>
+					) : null}
+				</Tabs>
+
+				{mode !== "saved" ? (
+					<label className="flex items-start gap-3 text-sm text-foreground">
+						<input
+							type="checkbox"
+							className="mt-1 size-5 shrink-0 accent-primary"
+							checked={remember}
+							onChange={(event) => setRemember(event.target.checked)}
+						/>
+						<span>
+							Remember on this device
+							<span className="block text-small text-muted-foreground">
+								Kept only in this browser. You can remove it any time.
+							</span>
+						</span>
+					</label>
+				) : null}
+
+				{error ? (
+					<p role="alert" className="text-sm text-destructive">
+						{error}
+					</p>
+				) : null}
+
+				<Button
+					type="button"
+					className="h-12 w-full text-base"
+					aria-disabled={!valid}
+					onClick={accept}
+				>
+					Use this signature
+				</Button>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+function TypePad({
+	typed,
+	font,
+	fontsReady,
+	onTyped,
+	onFont,
+}: {
+	typed: string;
+	font: ScriptFont;
+	fontsReady: boolean;
+	onTyped: (value: string) => void;
+	onFont: (font: ScriptFont) => void;
+}) {
+	const name = typed.trim();
+	return (
+		<div className="flex flex-col gap-3">
+			<Input
+				value={typed}
+				maxLength={limits.typedSignatureChars}
+				placeholder="Type your name"
+				aria-label="Type your name"
+				autoComplete="off"
+				className="h-12 text-base"
+				onChange={(event) => onTyped(event.target.value)}
+			/>
+			<div
+				className="on-paper relative aspect-3/1 w-full rounded-lg border border-input bg-card text-foreground"
+				aria-live="polite"
+			>
+				<FittedScript
+					text={name || "Your signature"}
+					family={fontsReady ? SCRIPT_FACE[font].family : "var(--font-sans)"}
+					className={cn(
+						"absolute inset-0 px-4 py-3",
+						name ? "text-foreground" : "text-muted-foreground",
+					)}
+				/>
 			</div>
+			<RadioGroup.Root
+				value={font}
+				onValueChange={(next) => onFont(next as ScriptFont)}
+				aria-label="Signature font"
+				className="grid grid-cols-2 gap-2"
+			>
+				{(Object.keys(SCRIPT_FACE) as ScriptFont[]).map((key) => (
+					<RadioGroup.Item
+						key={key}
+						value={key}
+						aria-label={SCRIPT_FACE[key].label}
+						className="on-paper relative h-14 overflow-hidden rounded-lg border border-input bg-card outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=checked]:border-2 data-[state=checked]:border-primary data-[state=checked]:bg-brand-bg"
+					>
+						<FittedScript
+							text={name || SCRIPT_FACE[key].label}
+							family={fontsReady ? SCRIPT_FACE[key].family : "var(--font-sans)"}
+							className="absolute inset-0 px-3 py-2 text-foreground"
+						/>
+					</RadioGroup.Item>
+				))}
+			</RadioGroup.Root>
 		</div>
 	);
 }
 
 function DrawPad({
 	seed,
-	onUse,
+	onInk,
 	onError,
 }: {
 	seed: string | null;
-	onUse: (signature: SignatureInput) => void;
+	onInk: (packed: string | null) => void;
 	onError: (message: string) => void;
 }) {
 	const frameRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const padRef = useRef<SignaturePad | null>(null);
-	const packedRef = useRef<string | null>(null);
+	const initial = useRef(seed);
+	const onInkRef = useRef(onInk);
+	onInkRef.current = onInk;
+	const touch = useMediaQuery("(pointer: coarse)");
+	const [strokeCount, setStrokeCount] = useState(0);
+
+	const report = useCallback(() => {
+		const pad = padRef.current;
+		const frame = frameRef.current;
+		if (!pad || !frame || pad.isEmpty()) {
+			setStrokeCount(0);
+			onInkRef.current(null);
+			return;
+		}
+		const width = frame.clientWidth;
+		const height = Math.max(1, Math.round(width / 3));
+		setStrokeCount(pad.toData().length);
+		try {
+			onInkRef.current(
+				drawnSignature(pointsToStrokes(pad.toData(), width, height)).strokes,
+			);
+		} catch (caught) {
+			onInkRef.current(null);
+			onError(
+				caught instanceof Error
+					? caught.message
+					: "That drawing could not be kept.",
+			);
+		}
+	}, [onError]);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -241,7 +372,6 @@ function DrawPad({
 			maxWidth: 2.4,
 		});
 		padRef.current = pad;
-		packedRef.current = seed;
 		const redraw = () => {
 			const width = frame.clientWidth;
 			const height = Math.max(1, Math.round(width / 3));
@@ -250,107 +380,100 @@ function DrawPad({
 			canvas.height = Math.round(height * ratio);
 			canvas.style.width = `${width}px`;
 			canvas.style.height = `${height}px`;
-			const context = canvas.getContext("2d");
-			context?.setTransform(ratio, 0, 0, ratio, 0, 0);
+			canvas.getContext("2d")?.setTransform(ratio, 0, 0, ratio, 0, 0);
+			const keep = pad.toData();
 			pad.clear();
-			if (!packedRef.current) return;
-			const groups = strokesToCanvasPoints(
-				unpackStrokes(packedRef.current),
-				width,
-				height,
-			);
-			pad.fromData(
-				groups.map((points) => ({
-					penColor: ink(frame),
-					dotSize: 0,
-					minWidth: 0.8,
-					maxWidth: 2.4,
-					velocityFilterWeight: 0.7,
-					compositeOperation: "source-over" as const,
-					points,
-				})),
-			);
+			const groups = keep.length
+				? keep
+				: initial.current
+					? strokesToCanvasPoints(
+							unpackStrokes(initial.current),
+							width,
+							height,
+						).map((points) => ({
+							penColor: ink(frame),
+							dotSize: 0,
+							minWidth: 0.8,
+							maxWidth: 2.4,
+							velocityFilterWeight: 0.7,
+							compositeOperation: "source-over" as const,
+							points,
+						}))
+					: [];
+			initial.current = null;
+			if (groups.length) pad.fromData(groups);
 		};
 		redraw();
+		setStrokeCount(pad.toData().length);
 		const observer = new ResizeObserver(redraw);
 		observer.observe(frame);
+		pad.addEventListener("endStroke", report);
 		return () => {
 			observer.disconnect();
 			pad.off();
 		};
-	}, [seed]);
+	}, [report]);
 
-	function rememberInk() {
+	function clear() {
+		padRef.current?.clear();
+		report();
+	}
+
+	function undo() {
 		const pad = padRef.current;
-		const canvas = canvasRef.current;
-		const frame = frameRef.current;
-		if (!pad || !canvas || !frame || pad.isEmpty()) {
-			packedRef.current = null;
-			return;
-		}
-		const width = frame.clientWidth;
-		const height = Math.max(1, Math.round(width / 3));
-		try {
-			packedRef.current = drawnSignature(
-				pointsToStrokes(pad.toData(), width, height),
-			).strokes;
-		} catch (caught) {
-			packedRef.current = null;
-			onError(
-				caught instanceof Error
-					? caught.message
-					: "That drawing could not be kept.",
-			);
-		}
+		if (!pad) return;
+		const strokes = pad.toData();
+		strokes.pop();
+		pad.fromData(strokes);
+		report();
 	}
 
 	return (
 		<div className="flex flex-col gap-3">
 			<div
 				ref={frameRef}
-				className="on-paper overflow-hidden rounded-md border border-input bg-card text-foreground"
+				className="on-paper relative overflow-hidden rounded-lg border border-input bg-card text-foreground"
 			>
 				<canvas
 					ref={canvasRef}
 					aria-label="Draw a signature"
 					className="block w-full touch-none"
-					onPointerUp={rememberInk}
-					onPointerLeave={rememberInk}
 				/>
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute inset-x-4 bottom-[22%] border-t border-dashed border-input"
+				/>
+				<span
+					aria-hidden="true"
+					className="pointer-events-none absolute bottom-[22%] left-4 -translate-y-1 text-small text-muted-foreground"
+				>
+					×
+				</span>
 			</div>
-			<p className="text-xs text-muted-foreground">
-				The drawing area stays {CAPTURE_BOX.w / CAPTURE_BOX.h}:1.
-			</p>
-			<div className="flex gap-2">
-				<button
+			{touch ? (
+				<p className="text-small text-muted-foreground">
+					Use your finger or a stylus. Turn your phone sideways for more room.
+				</p>
+			) : null}
+			<div className="grid grid-cols-2 gap-2">
+				<Button
 					type="button"
-					className="rounded-md px-3 py-2 text-sm text-muted-foreground hover:underline"
-					onClick={() => {
-						padRef.current?.clear();
-						packedRef.current = null;
-					}}
+					variant="ghost"
+					className="min-h-11"
+					disabled={strokeCount === 0}
+					onClick={clear}
 				>
 					Clear
-				</button>
-				<button
+				</Button>
+				<Button
 					type="button"
-					className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
-					onClick={() => {
-						rememberInk();
-						const packed = packedRef.current;
-						if (!packed) {
-							onError("Draw a signature first.");
-							return;
-						}
-						onUse({
-							kind: "drawn",
-							box: { w: CAPTURE_BOX.w, h: CAPTURE_BOX.h },
-							strokes: packed,
-						});
-					}}
+					variant="ghost"
+					className="min-h-11"
+					disabled={strokeCount === 0}
+					onClick={undo}
 				>
-					Use this signature
-				</button>
+					Undo
+				</Button>
 			</div>
 		</div>
 	);

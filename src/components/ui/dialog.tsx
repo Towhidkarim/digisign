@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
 
+import { useReturnFocus } from "#/hooks/use-return-focus.ts";
 import { cn } from "#/lib/utils.ts";
 
 /**
@@ -17,11 +18,16 @@ function DialogContent({
 	children,
 	closeLabel = "Close",
 	showClose = true,
+	sheet = false,
+	onCloseAutoFocus,
 	...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
 	closeLabel?: string;
 	showClose?: boolean;
+	/** A bottom sheet below 768px, a centred dialog from 768px. */
+	sheet?: boolean;
 }) {
+	const returnFocus = useReturnFocus(onCloseAutoFocus);
 	return (
 		<DialogPrimitive.Portal>
 			<DialogPrimitive.Overlay
@@ -32,8 +38,12 @@ function DialogContent({
 				data-slot="dialog-content"
 				className={cn(
 					"fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-card p-6 text-card-foreground shadow-lg outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+					sheet &&
+						"max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:max-h-[92dvh] max-md:w-full max-md:max-w-none max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-t-2xl max-md:rounded-b-none max-md:data-[state=closed]:slide-out-to-bottom max-md:data-[state=open]:slide-in-from-bottom",
 					className,
 				)}
+				aria-modal="true"
+				onCloseAutoFocus={returnFocus}
 				{...props}
 			>
 				{children}
