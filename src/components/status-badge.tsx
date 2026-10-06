@@ -80,3 +80,65 @@ export function StatusBadge({
 		</span>
 	);
 }
+
+export type SignerStatus =
+	| "pending"
+	| "invited"
+	| "signed"
+	| "declined"
+	| "voided";
+
+const SIGNER_STATUS: Record<
+	SignerStatus,
+	{ label: string; icon: LucideIcon; tone: string }
+> = {
+	pending: {
+		label: "Not sent yet",
+		icon: Pencil,
+		tone: "bg-neutral-bg text-neutral-fg",
+	},
+	invited: {
+		label: "Waiting",
+		icon: Send,
+		tone: "bg-brand-bg text-brand-fg",
+	},
+	signed: {
+		label: "Signed",
+		icon: CircleCheck,
+		tone: "bg-success-bg text-success-fg",
+	},
+	declined: {
+		label: "Declined",
+		icon: CircleX,
+		tone: "bg-danger-bg text-danger-fg",
+	},
+	voided: {
+		label: "Voided",
+		icon: Ban,
+		tone: "bg-neutral-bg text-neutral-fg",
+	},
+};
+
+/** The five signer states, styled like StatusBadge. */
+export function SignerStatusBadge({
+	status,
+	className,
+}: {
+	status: string;
+	className?: string;
+}) {
+	const known = status in SIGNER_STATUS ? (status as SignerStatus) : "pending";
+	const { label, icon: Icon, tone } = SIGNER_STATUS[known];
+	return (
+		<span
+			className={cn(
+				"inline-flex h-6 shrink-0 items-center gap-1 rounded-full px-2.5 text-xs font-medium whitespace-nowrap",
+				tone,
+				className,
+			)}
+		>
+			<Icon aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+			{label}
+		</span>
+	);
+}

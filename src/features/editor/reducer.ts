@@ -6,17 +6,10 @@ import {
 	ptToMicro,
 	viewSize,
 } from "#/core/coords.ts";
+import { SIGNER_COLORS } from "#/core/signer-colors.ts";
 import { type FieldKind, limits, minFieldSizePt } from "#/core/limits.ts";
 
-/** Signer identity colors are theme tokens (--signer-1 to --signer-6); the 7th to 10th signer reuse them. */
-export const SIGNER_COLORS = [
-	"var(--signer-1)",
-	"var(--signer-2)",
-	"var(--signer-3)",
-	"var(--signer-4)",
-	"var(--signer-5)",
-	"var(--signer-6)",
-] as const;
+export { SIGNER_COLORS };
 
 export const FIELD_LABEL: Record<FieldKind, string> = {
 	signature: "Signature",

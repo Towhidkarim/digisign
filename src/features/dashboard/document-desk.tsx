@@ -1,296 +1,444 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import {
+	Ban,
+	ChevronLeft,
+	CircleCheck,
+	CircleX,
+	Clock,
+	Copy,
+	Download,
+	FileText,
+	ShieldCheck,
+	TriangleAlert,
+} from "lucide-react";
+import { type ReactNode, useState } from "react";
 
+import { isDocumentStatus, StatusBadge } from "#/components/status-badge.tsx";
+import { Alert, AlertDescription } from "#/components/ui/alert.tsx";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "#/components/ui/alert-dialog.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import { DocumentSheet } from "#/features/dashboard/document-list.tsx";
+import { ActivityCard } from "#/features/dashboard/activity-card.tsx";
+import { activityLines } from "#/features/dashboard/detail-format.ts";
 import {
 	displayTitle,
-	eventLabel,
+	formatRelative,
 	formatUpdated,
 	formatWhen,
-	signerLabel,
-	signerTone,
-	statusLabel,
-	statusTone,
 } from "#/features/dashboard/format.ts";
+import { SigningOrder } from "#/features/dashboard/signing-order.tsx";
+import { cn } from "#/lib/utils.ts";
 import { reissueInviteFn, voidDocumentFn } from "#/server/documents.ts";
 import type {
 	OwnedDocumentDetail,
 	OwnedSigner,
 } from "#/server/domain/documents.ts";
 
-type Notice = { tone: "ok" | "err"; text: string };
+/** The signed PDF is built in the browser with pdf-lib, so it loads on demand and never in the Worker bundle. */
+const loadSignedPdf = import.meta.env.SSR
+	? null
+	: () => import("#/features/dashboard/signed-pdf.ts");
+
+type Notice = { tone: "info" | "destructive"; text: string };
+type Busy = "link" | "void" | "signed" | null;
 
 export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
 	const router = useRouter();
 	const [notice, setNotice] = useState<Notice | null>(null);
-	const [busy, setBusy] = useState<"link" | "void" | null>(null);
-	const [confirmVoid, setConfirmVoid] = useState(false);
-	const invited = document.signers.find(
+	const [busy, setBusy] = useState<Busy>(null);
+	const [voidOpen, setVoidOpen] = useState(false);
+
+	const status = isDocumentStatus(document.status) ? document.status : "draft";
+	const title = displayTitle(document.title);
+	const invitedIndex = document.signers.findIndex(
 		(signer) => signer.status === "invited",
 	);
-	const completed = document.status === "completed";
+	const invited = document.signers[invitedIndex];
+	const next = invited ? document.signers[invitedIndex + 1] : undefined;
+	const sentAt = document.activity.find(
+		(event) => event.type === "document.published",
+	)?.occurredAt;
+	const createdAt = document.activity.find(
+		(event) => event.type === "document.created",
+	)?.occurredAt;
+	const lastActivity =
+		document.activity.at(-1)?.occurredAt ?? document.updatedAt;
+	const completed = status === "completed";
+
+	async function copyLink(signer: OwnedSigner) {
+		setBusy("link");
+		setNotice(null);
+		const result = await reissueInviteFn({ data: { signerId: signer.id } });
+		setBusy(null);
+		if ("error" in result) {
+			setNotice({ tone: "destructive", text: result.error });
+			return;
+		}
+		try {
+			await navigator.clipboard.writeText(result.url);
+			setNotice({
+				tone: "info",
+				text: `Link copied. The link ${signer.name} had before no longer works, and a new one was sent.`,
+			});
+		} catch {
+			setNotice({
+				tone: "info",
+				text: `The old link no longer works. Copy the new one: ${result.url}`,
+			});
+		}
+		await router.invalidate();
+	}
+
+	async function voidIt() {
+		setBusy("void");
+		const result = await voidDocumentFn({ data: { documentId: document.id } });
+		setBusy(null);
+		setVoidOpen(false);
+		if ("error" in result) {
+			setNotice({ tone: "destructive", text: result.error });
+			return;
+		}
+		setNotice({ tone: "info", text: "This document is voided." });
+		await router.invalidate();
+	}
+
+	async function downloadSigned() {
+		if (!loadSignedPdf) return;
+		setBusy("signed");
+		setNotice(null);
+		const { downloadSignedPdf } = await loadSignedPdf();
+		const result = await downloadSignedPdf(document.id, title);
+		setBusy(null);
+		if ("error" in result) {
+			setNotice({
+				tone: "destructive",
+				text: `${result.error} You can still download the original.`,
+			});
+		}
+	}
+
+	const subtitle = [
+		document.signers.length > 0
+			? `${document.signers.length} ${document.signers.length === 1 ? "signer" : "signers"}`
+			: "",
+		document.pageCount > 0
+			? `${document.pageCount} ${document.pageCount === 1 ? "page" : "pages"}`
+			: "",
+		sentAt != null ? `Sent ${formatUpdated(sentAt)}` : "",
+	]
+		.filter((part) => part.length > 0)
+		.join(" · ");
 
 	return (
 		<div>
 			<Link
 				to="/documents"
-				className="text-sm font-medium text-primary no-underline hover:text-primary"
+				className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground no-underline hover:text-foreground"
 			>
+				<ChevronLeft className="size-4" strokeWidth={1.75} />
 				Documents
 			</Link>
-			<h1 className="mt-4 max-w-[24ch] text-[clamp(1.7rem,3vw,2.1rem)] font-semibold tracking-tight break-words">
-				{displayTitle(document.title)}
-			</h1>
-			<p className={`mt-2 text-sm ${statusTone(document.status)}`}>
-				{statusLabel(document.status)}
-			</p>
-			<p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-muted-foreground">
-				<DeskSummary document={document} invited={invited} />
-			</p>
-			<div className="mt-6 flex flex-wrap gap-2">
-				{document.status === "draft" ? (
-					<Button asChild size="sm">
-						<Link to="/prepare" search={{ documentId: document.id }}>
-							Continue editing
-						</Link>
-					</Button>
-				) : null}
-				{invited ? (
-					<Button
-						type="button"
-						size="sm"
-						disabled={busy !== null}
-						onClick={() => {
-							setConfirmVoid(false);
-							setBusy("link");
-							setNotice(null);
-							void reissueInviteFn({ data: { signerId: invited.id } }).then(
-								async (result) => {
-									setBusy(null);
-									if ("error" in result) {
-										setNotice({ tone: "err", text: result.error });
-										return;
-									}
-									try {
-										await navigator.clipboard.writeText(result.url);
-										setNotice({
-											tone: "ok",
-											text: "Link copied. The previous link no longer works, and a new one was sent.",
-										});
-									} catch {
-										setNotice({
-											tone: "ok",
-											text: `The previous link no longer works. Copy this one: ${result.url}`,
-										});
-									}
-									await router.invalidate();
-								},
-							);
-						}}
-					>
-						{busy === "link" ? "Copying…" : "Copy a new signing link"}
-					</Button>
-				) : null}
-				{completed ? (
-					<Button asChild size="sm" variant={invited ? "outline" : "default"}>
-						<Link to="/v/$documentId" params={{ documentId: document.id }}>
-							Check this PDF
-						</Link>
-					</Button>
-				) : null}
-				{document.uploaded ? (
-					<Button asChild variant="outline" size="sm">
-						<a href={`/files/documents/${document.id}/source`}>Download PDF</a>
-					</Button>
-				) : null}
-				{document.status === "in_progress" ? (
-					<Button
-						type="button"
-						variant={confirmVoid ? "destructive" : "outline"}
-						size="sm"
-						disabled={busy !== null}
-						onClick={() => {
-							if (!confirmVoid) {
-								setConfirmVoid(true);
-								setNotice({
-									tone: "err",
-									text: "Voiding stops this document. The current signing link will no longer work.",
-								});
-								return;
-							}
-							setBusy("void");
-							void voidDocumentFn({
-								data: { documentId: document.id },
-							}).then(async (result) => {
-								setBusy(null);
-								setConfirmVoid(false);
-								if ("error" in result) {
-									setNotice({ tone: "err", text: result.error });
-									return;
-								}
-								setNotice({ tone: "ok", text: "This document is voided." });
-								await router.invalidate();
-							});
-						}}
-					>
-						{busy === "void"
-							? "Voiding…"
-							: confirmVoid
-								? "Void it"
-								: "Void this document"}
-					</Button>
-				) : null}
+
+			<div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+				<div className="min-w-0">
+					<div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+						<h1 className="text-title font-semibold tracking-tight break-words">
+							{title}
+						</h1>
+						<StatusBadge status={status} />
+					</div>
+					{subtitle ? (
+						<p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+					) : null}
+				</div>
+				<div className="flex flex-wrap items-center gap-2">
+					{status === "draft" ? (
+						<Button asChild size="lg">
+							<Link to="/prepare" search={{ documentId: document.id }}>
+								Continue editing
+							</Link>
+						</Button>
+					) : null}
+					{completed ? (
+						<Button
+							type="button"
+							size="lg"
+							disabled={busy !== null}
+							onClick={() => void downloadSigned()}
+						>
+							<Download strokeWidth={1.75} />
+							{busy === "signed" ? "Preparing…" : "Download signed PDF"}
+						</Button>
+					) : null}
+					{document.uploaded ? (
+						<Button asChild variant="outline" size="lg">
+							<a href={`/files/documents/${document.id}/source`}>
+								<Download strokeWidth={1.75} />
+								Download original
+							</a>
+						</Button>
+					) : null}
+					{status === "in_progress" ? (
+						<Button
+							type="button"
+							variant="ghost"
+							size="lg"
+							className="text-destructive hover:bg-danger-bg hover:text-danger-fg"
+							disabled={busy !== null}
+							onClick={() => setVoidOpen(true)}
+						>
+							<Ban strokeWidth={1.75} />
+							Void document
+						</Button>
+					) : null}
+				</div>
 			</div>
+
 			{notice ? (
-				<p
-					className={`mt-3 max-w-[52ch] text-sm break-words ${notice.tone === "err" ? "text-destructive" : "text-muted-foreground"}`}
-				>
-					{notice.text}
-				</p>
+				<Alert variant={notice.tone} className="mt-6">
+					<AlertDescription className="mt-0 break-words">
+						{notice.text}
+					</AlertDescription>
+				</Alert>
 			) : null}
 
-			<DocumentSheet>
-				<ul>
-					{document.signers.length === 0 ? (
-						<li className="py-5 text-sm text-muted-foreground">
-							No one is named on this document yet.
-						</li>
-					) : (
-						document.signers.map((signer, index) => (
-							<SignerRow
-								key={signer.id}
-								signer={signer}
-								divided={index < document.signers.length - 1}
-							/>
-						))
-					)}
-				</ul>
-			</DocumentSheet>
+			<StatusCallout
+				status={status}
+				document={document}
+				invited={invited}
+				next={next}
+				busy={busy === "link"}
+				onCopy={invited ? () => void copyLink(invited) : undefined}
+			/>
 
-			<DocumentSheet>
-				<h2 className="pt-5 font-medium">Activity</h2>
-				{document.activity.length === 0 ? (
-					<p className="py-5 text-sm text-muted-foreground">
-						Nothing has been recorded yet.
-					</p>
-				) : (
-					<ol>
-						{document.activity.map((event, index) => (
-							<li
-								key={event.seq}
-								className={
-									index < document.activity.length - 1
-										? "flex items-start justify-between gap-6 border-b border-border py-5"
-										: "flex items-start justify-between gap-6 py-5"
-								}
+			<div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
+				<div className="flex min-w-0 flex-col gap-6">
+					<SigningOrder signers={document.signers} />
+					<ActivityCard
+						lines={activityLines(document.activity, document.signers)}
+					/>
+				</div>
+				<aside className="flex flex-col gap-6">
+					<section className="rounded-lg border border-border bg-card p-5">
+						<h2 className="text-subheading font-semibold">Details</h2>
+						<dl className="mt-3 border-t border-border text-sm">
+							<Detail label="Source file" value={title} />
+							{document.pageCount > 0 ? (
+								<Detail label="Pages" value={String(document.pageCount)} />
+							) : null}
+							{createdAt != null ? (
+								<Detail label="Created" value={formatUpdated(createdAt)} />
+							) : null}
+							{status === "in_progress" && document.expiresAt != null ? (
+								<Detail
+									label="Expires"
+									value={formatUpdated(document.expiresAt)}
+								/>
+							) : null}
+							<Detail
+								label="Last activity"
+								value={formatRelative(lastActivity)}
+								title={formatWhen(lastActivity)}
+							/>
+							<Detail label="Document ID" value={document.id} />
+						</dl>
+					</section>
+					<section className="rounded-lg border border-border bg-card p-5">
+						<div className="flex items-center gap-3">
+							<span
+								aria-hidden="true"
+								className="grid size-10 shrink-0 place-items-center rounded-md bg-accent text-muted-foreground"
 							>
-								<div className="min-w-0">
-									<p className="font-medium">
-										{eventLabel(event.type, event.reissue)}
-									</p>
-									<p className="mt-1 text-sm text-muted-foreground">
-										{event.actorType === "owner"
-											? "You"
-											: (event.actorName ?? "DigiSign")}
-									</p>
-								</div>
-								<time
-									dateTime={new Date(event.occurredAt).toISOString()}
-									className="shrink-0 text-sm text-muted-foreground tabular-nums"
-								>
-									{formatWhen(event.occurredAt)}
-								</time>
-							</li>
-						))}
-					</ol>
-				)}
-			</DocumentSheet>
+								<ShieldCheck className="size-5" strokeWidth={1.75} />
+							</span>
+							<h2 className="text-subheading font-semibold">
+								{completed ? "Check the record" : "Checkable when finished"}
+							</h2>
+						</div>
+						<p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+							{completed
+								? "The finished PDF carries a record that anyone can check without an account."
+								: "Once everyone has signed, the finished PDF carries a record that anyone can check without an account."}
+						</p>
+						{completed ? (
+							<Button asChild variant="outline" size="sm" className="mt-4">
+								<Link to="/v/$documentId" params={{ documentId: document.id }}>
+									Check this PDF
+								</Link>
+							</Button>
+						) : null}
+					</section>
+				</aside>
+			</div>
+
+			<AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Void this document?</AlertDialogTitle>
+						<AlertDialogDescription>
+							Voiding stops signing for everyone. The current signing link will
+							no longer work, and this cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Keep signing open</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							disabled={busy === "void"}
+							onClick={(event) => {
+								event.preventDefault();
+								void voidIt();
+							}}
+						>
+							{busy === "void" ? "Voiding…" : "Void document"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }
 
-function SignerRow({
-	signer,
-	divided,
+function Detail({
+	label,
+	value,
+	title,
 }: {
-	signer: OwnedSigner;
-	divided: boolean;
+	label: string;
+	value: string;
+	title?: string;
 }) {
-	const evidence = captured(signer);
 	return (
-		<li className={divided ? "border-b border-border py-5" : "py-5"}>
-			<p className="font-medium">
-				{signer.order}. {signer.name}
-			</p>
-			{signer.email ? (
-				<p className="mt-1 text-sm break-all text-muted-foreground">
-					{signer.email}
-				</p>
-			) : null}
-			<p className={`mt-1 text-sm ${signerTone(signer.status)}`}>
-				{signerLabel(signer.status)}
-			</p>
-			{signerMoment(signer) ? (
-				<p className="mt-1 text-sm text-muted-foreground tabular-nums">
-					{formatWhen(signerMoment(signer) ?? 0)}
-				</p>
-			) : null}
-			{signer.declineReason ? (
-				<p className="mt-2 max-w-[52ch] text-sm text-destructive">
-					{signer.declineReason}
-				</p>
-			) : null}
-			{evidence.address ? (
-				<p className="mt-3 max-w-[52ch] text-sm break-words">
-					<span className="text-muted-foreground">Address </span>
-					{evidence.address}
-				</p>
-			) : null}
-			{evidence.browser ? (
-				<p className="mt-2 max-w-[52ch] text-sm break-words">
-					<span className="text-muted-foreground">Browser </span>
-					{evidence.browser}
-				</p>
-			) : null}
-		</li>
+		<div className="flex items-baseline justify-between gap-4 border-b border-border py-3 last:border-b-0">
+			<dt className="shrink-0 text-muted-foreground">{label}</dt>
+			<dd title={title} className="min-w-0 text-right break-all">
+				{value}
+			</dd>
+		</div>
 	);
 }
 
-function DeskSummary({
+const CALLOUT_TONE = {
+	brand: "border-brand-soft bg-brand-bg text-brand-fg",
+	success: "border-success/30 bg-success-bg text-success-fg",
+	warning: "border-warning/30 bg-warning-bg text-warning-fg",
+	danger: "border-destructive/30 bg-danger-bg text-danger-fg",
+	neutral: "border-border bg-neutral-bg text-neutral-fg",
+} as const;
+
+/** Says where the document stands and what to do next. */
+function StatusCallout({
+	status,
 	document,
 	invited,
+	next,
+	busy,
+	onCopy,
 }: {
+	status: ReturnType<typeof statusOf>;
 	document: OwnedDocumentDetail;
 	invited: OwnedSigner | undefined;
+	next: OwnedSigner | undefined;
+	busy: boolean;
+	onCopy: (() => void) | undefined;
 }) {
-	const signed = document.signers.filter(
-		(signer) => signer.status === "signed",
-	).length;
-	const parts = [
-		document.signers.length > 0
-			? `${signed} of ${document.signers.length} signed`
-			: "",
-		invited ? `Waiting on ${invited.name}` : "",
-		document.expiresAt != null && document.status === "in_progress"
-			? `Expires ${formatUpdated(document.expiresAt)}`
-			: "",
-		document.pageCount > 0
-			? `${document.pageCount} ${document.pageCount === 1 ? "page" : "pages"}`
-			: "",
-	].filter((part) => part.length > 0);
-	return parts.length > 0 ? parts.join(". ") : "Nothing else is recorded yet.";
+	let tone: keyof typeof CALLOUT_TONE = "neutral";
+	let icon: ReactNode = <FileText className="size-5" strokeWidth={1.75} />;
+	let heading = "";
+	let body: ReactNode = null;
+	let note: string | null = null;
+
+	if (status === "in_progress") {
+		tone = "brand";
+		icon = <Clock className="size-5" strokeWidth={1.75} />;
+		if (invited) {
+			heading = `Waiting on ${invited.name}`;
+			const when = [
+				invited.invitedAt != null
+					? `Invited ${formatRelative(invited.invitedAt)}`
+					: "Invited",
+				invited.firstViewedAt != null
+					? `and opened ${formatRelative(invited.firstViewedAt)}`
+					: "and has not opened it yet",
+			].join(" ");
+			body = `${when}. ${next ? `${next.name} is invited after they sign.` : "They are the last person to sign."}`;
+			note = `Copying a new link turns off the one ${invited.name} already has.`;
+		} else {
+			heading = "Out for signature";
+			body = "The next person is invited as soon as the one before them signs.";
+		}
+	} else if (status === "draft") {
+		icon = <FileText className="size-5" strokeWidth={1.75} />;
+		heading = "This document is a draft";
+		body =
+			"Nothing has been sent. Continue editing to place fields and send it.";
+	} else if (status === "completed") {
+		tone = "success";
+		icon = <CircleCheck className="size-5" strokeWidth={1.75} />;
+		heading = "Everyone has signed";
+		body = "The signed PDF is ready to download.";
+	} else if (status === "declined") {
+		tone = "danger";
+		icon = <CircleX className="size-5" strokeWidth={1.75} />;
+		const decliner = document.signers.find(
+			(signer) => signer.status === "declined",
+		);
+		heading = decliner ? `${decliner.name} declined` : "Signing was declined";
+		body = decliner?.declineReason ?? "Signing has stopped.";
+	} else if (status === "expired") {
+		tone = "warning";
+		icon = <TriangleAlert className="size-5" strokeWidth={1.75} />;
+		heading = "This document expired";
+		body = "It was not fully signed in time. Signing links no longer work.";
+	} else {
+		icon = <Ban className="size-5" strokeWidth={1.75} />;
+		heading = "This document is voided";
+		body = "Signing was stopped. Signing links no longer work.";
+	}
+
+	return (
+		<section
+			className={cn("mt-6 rounded-lg border p-5", CALLOUT_TONE[tone])}
+			aria-label="Status"
+		>
+			<div className="flex flex-col gap-4 md:flex-row md:items-center">
+				<span
+					aria-hidden="true"
+					className="grid size-10 shrink-0 place-items-center rounded-full bg-card"
+				>
+					{icon}
+				</span>
+				<div className="min-w-0 flex-1">
+					<h2 className="text-subheading font-semibold">{heading}</h2>
+					<p className="mt-0.5 text-sm leading-relaxed break-words">{body}</p>
+				</div>
+				{onCopy ? (
+					<Button
+						type="button"
+						variant="outline"
+						size="lg"
+						className="shrink-0 bg-card text-foreground"
+						disabled={busy}
+						onClick={onCopy}
+					>
+						<Copy strokeWidth={1.75} />
+						{busy ? "Copying…" : "Copy new signing link"}
+					</Button>
+				) : null}
+			</div>
+			{note ? <p className="mt-3 text-small">{note}</p> : null}
+		</section>
+	);
 }
 
-function signerMoment(signer: OwnedSigner): number | null {
-	return signer.signedAt ?? signer.firstViewedAt ?? signer.invitedAt;
-}
-
-function captured(signer: OwnedSigner): { address: string; browser: string } {
-	if (signer.status !== "signed") return { address: "", browser: "" };
-	const address = signer.clientIp?.trim() || "";
-	return {
-		address: address === "unknown" ? "" : address,
-		browser: signer.userAgent?.trim() || "",
-	};
+function statusOf(value: string) {
+	return isDocumentStatus(value) ? value : "draft";
 }
