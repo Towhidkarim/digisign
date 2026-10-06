@@ -14,8 +14,13 @@ const PrepareDesk = lazyDesk<object>(
 
 export const Route = createFileRoute("/prepare")({
 	ssr: false,
-	validateSearch: (search: Record<string, unknown>): { documentId?: string } => {
-		if (typeof search.documentId !== "string" || search.documentId.length === 0) {
+	validateSearch: (
+		search: Record<string, unknown>,
+	): { documentId?: string } => {
+		if (
+			typeof search.documentId !== "string" ||
+			search.documentId.length === 0
+		) {
 			return {};
 		}
 		return { documentId: search.documentId };

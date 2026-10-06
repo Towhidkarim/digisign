@@ -18,6 +18,10 @@ export type DocumentStatus =
 	| "voided"
 	| "expired";
 
+export function isDocumentStatus(value: string): value is DocumentStatus {
+	return value in STATUS;
+}
+
 const STATUS: Record<
 	DocumentStatus,
 	{ label: string; icon: LucideIcon; tone: string }

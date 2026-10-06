@@ -14,8 +14,9 @@ export const Route = createFileRoute("/documents")({
 });
 
 function DocumentsLayout() {
+	const { user } = Route.useRouteContext();
 	return (
-		<AppShell>
+		<AppShell user={user}>
 			<Outlet />
 		</AppShell>
 	);

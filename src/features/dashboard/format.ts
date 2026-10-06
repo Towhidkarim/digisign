@@ -146,3 +146,69 @@ export function progressLine(document: OwnedDocument): string {
 		.filter((part) => part.length > 0)
 		.join(". ");
 }
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+function startOfDay(ms: number): number {
+	const date = new Date(ms);
+	return new Date(
+		date.getFullYear(),
+		date.getMonth(),
+		date.getDate(),
+	).getTime();
+}
+
+/** Relative for the last 7 days, absolute after that. The full time goes in a tooltip. */
+export function formatRelative(ms: number, now = Date.now()): string {
+	const elapsed = now - ms;
+	if (elapsed < MINUTE) return "Just now";
+	if (elapsed < HOUR) {
+		const minutes = Math.floor(elapsed / MINUTE);
+		return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ago`;
+	}
+	const days = Math.round((startOfDay(now) - startOfDay(ms)) / 86_400_000);
+	if (days === 0) {
+		const hours = Math.floor(elapsed / HOUR);
+		return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+	}
+	if (days === 1) return "Yesterday";
+	if (days < 7) return `${days} days ago`;
+	return formatUpdated(ms);
+}
+
+function plural(count: number, word: string): string {
+	return `${count} ${word}${count === 1 ? "" : "s"}`;
+}
+
+/** The one line under a document title: who it is waiting on, or what happened. */
+export function metaLine(document: OwnedDocument): string {
+	const { status, signers, signed, waitingOn } = document;
+	if (status === "in_progress") {
+		return waitingOn
+			? `Waiting on ${waitingOn}`
+			: `${signed} of ${signers} signed`;
+	}
+	if (status === "draft") {
+		return signers === 0
+			? "No signers added yet"
+			: `${plural(signers, "signer")} added, not sent`;
+	}
+	if (status === "completed") {
+		if (signers === 1) return "Signed by 1 signer";
+		return signers === 2
+			? "Signed by both signers"
+			: `Signed by all ${signers} signers`;
+	}
+	if (status === "declined") {
+		return signers > 0
+			? `Declined after ${signed} of ${signers} signed`
+			: "Declined";
+	}
+	if (status === "expired") {
+		return signers > 0
+			? `Expired with ${signed} of ${signers} signed`
+			: "Expired";
+	}
+	return "Voided";
+}

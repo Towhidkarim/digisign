@@ -180,6 +180,20 @@
 	--shadow-lg: var(--shadow-lg);
 }
 
+/* Named type styles from DESIGN.md (body and caption use text-sm and text-xs). */
+@theme {
+	--text-display: 2.25rem;
+	--text-display--line-height: 2.75rem;
+	--text-title: 1.625rem;
+	--text-title--line-height: 2.125rem;
+	--text-heading: 1.125rem;
+	--text-heading--line-height: 1.625rem;
+	--text-subheading: 0.9375rem;
+	--text-subheading--line-height: 1.375rem;
+	--text-small: 0.8125rem;
+	--text-small--line-height: 1.25rem;
+}
+
 /* A PDF page is always white paper. Ink, fields and typed signatures drawn on it keep light-theme values in dark mode. */
 .on-paper {
 	color-scheme: light;

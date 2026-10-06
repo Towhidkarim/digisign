@@ -46,14 +46,14 @@ export function DeskSkeleton({ sheet = false }: { sheet?: boolean }) {
 	return (
 		<div className="flex min-h-svh" aria-busy="true">
 			<p className="sr-only">Loading</p>
-			<div className="hidden w-64 shrink-0 border-r border-border p-4 md:block">
+			<div className="hidden w-[248px] shrink-0 border-r border-border p-4 md:block">
 				<Skeleton className="h-8 w-32" />
 				<Skeleton className="mt-4 h-9 w-full" />
 				<Skeleton className="mt-6 h-8 w-full" />
 				<Skeleton className="mt-2 h-8 w-full" />
 				<Skeleton className="mt-2 h-8 w-full" />
 			</div>
-			<div className="mx-auto w-full max-w-3xl flex-1 px-6 pt-6 pb-16 md:px-10 md:pt-10">
+			<div className="mx-auto w-full max-w-[960px] flex-1 px-4 pt-6 pb-16 sm:px-6 lg:px-8 lg:pt-10">
 				<Skeleton className="h-9 w-48" />
 				<Skeleton className="mt-3 h-4 w-56" />
 				{sheet ? (

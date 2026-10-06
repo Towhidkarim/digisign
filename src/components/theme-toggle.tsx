@@ -10,14 +10,14 @@ const NEXT: Record<Theme, Theme> = {
 };
 
 const LABEL: Record<Theme, string> = {
-	system: "System theme",
-	light: "Light theme",
-	dark: "Dark theme",
+	system: "Theme: system. Switch to light",
+	light: "Theme: light. Switch to dark",
+	dark: "Theme: dark. Switch to system",
 };
 
 const ICON = { system: Monitor, light: Sun, dark: Moon } as const;
 
-/** Cycles system, light, dark. */
+/** Icon button that cycles system, light, dark. */
 export function ThemeToggle({ className }: { className?: string }) {
 	const { theme, setTheme } = useTheme();
 	const Icon = ICON[theme];
@@ -25,12 +25,13 @@ export function ThemeToggle({ className }: { className?: string }) {
 		<Button
 			type="button"
 			variant="ghost"
-			size="sm"
+			size="icon"
 			className={className}
+			aria-label={LABEL[theme]}
+			title={LABEL[theme]}
 			onClick={() => setTheme(NEXT[theme])}
 		>
 			<Icon strokeWidth={1.75} />
-			{LABEL[theme]}
 		</Button>
 	);
 }
