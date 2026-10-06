@@ -31,7 +31,7 @@ function InviteLanding() {
 
 	return (
 		<main className="mx-auto flex min-h-svh max-w-lg flex-col justify-center gap-4 px-6">
-			<h1 className="text-2xl font-semibold text-[var(--harbor)]">
+			<h1 className="text-2xl font-semibold text-primary">
 				You have a document to sign
 			</h1>
 			<p className="text-muted-foreground">
@@ -40,7 +40,7 @@ function InviteLanding() {
 			</p>
 			<button
 				type="button"
-				className="w-fit rounded-md bg-[var(--harbor)] px-4 py-2 text-sm text-white disabled:opacity-40"
+				className="w-fit rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-40"
 				disabled={busy}
 				onClick={() => void open()}
 			>

@@ -1,0 +1,40 @@
+<!-- @dsCard height=288 -->
+<link rel="stylesheet" href="tokens.css"><script>document.documentElement.setAttribute("data-theme",new URLSearchParams(location.search).get("theme")||"light")</script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;background:var(--bg)}
+svg{display:block;width:960px;height:288px}
+.ground{fill:var(--bg)}
+.brand{fill:var(--brand)}
+.soft{fill:var(--brand-soft)}
+.ink{fill:var(--ink)}
+.ok{fill:var(--success)}
+.dot{fill:var(--brand-soft)}
+.lg{rx:var(--radius-lg)}
+.md{rx:var(--radius-md)}
+.name{font:600 88px/0.95 var(--font-sans);fill:var(--ink);letter-spacing:-0.02em}
+.tag{font:400 13px/1.4 var(--font-sans);fill:var(--ink-muted)}
+</style>
+<!--
+blocks: brand 208x204 (space steps), ink 144x252 bleeding bottom, brand-soft 208x92 bleeding bottom, success 40x40 satellite + 68x96 bleeding right.
+arrangement: one tall brand slab with satellites, staggered like sheets stacked on a desk; ink slab anchors the right edge of the stack.
+pattern: dot grid at space-4 pitch (16) on the brand slab, because DigiSign is about a precise, checkable record; 30 dots.
+radii: radius-lg (12) on slabs, radius-md (8) on small blocks; steps 8, 16, 48.
+-->
+<svg viewBox="0 0 960 288" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DigiSign">
+<rect class="ground" width="960" height="288"/>
+<rect class="brand lg" x="520" y="-12" width="208" height="204"/>
+<g class="dot">
+<circle cx="544" cy="48" r="2"/><circle cx="560" cy="48" r="2"/><circle cx="576" cy="48" r="2"/><circle cx="592" cy="48" r="2"/><circle cx="608" cy="48" r="2"/><circle cx="624" cy="48" r="2"/>
+<circle cx="544" cy="64" r="2"/><circle cx="560" cy="64" r="2"/><circle cx="576" cy="64" r="2"/><circle cx="592" cy="64" r="2"/><circle cx="608" cy="64" r="2"/><circle cx="624" cy="64" r="2"/>
+<circle cx="544" cy="80" r="2"/><circle cx="560" cy="80" r="2"/><circle cx="576" cy="80" r="2"/><circle cx="592" cy="80" r="2"/><circle cx="608" cy="80" r="2"/><circle cx="624" cy="80" r="2"/>
+<circle cx="544" cy="96" r="2"/><circle cx="560" cy="96" r="2"/><circle cx="576" cy="96" r="2"/><circle cx="592" cy="96" r="2"/><circle cx="608" cy="96" r="2"/><circle cx="624" cy="96" r="2"/>
+<circle cx="544" cy="112" r="2"/><circle cx="560" cy="112" r="2"/><circle cx="576" cy="112" r="2"/><circle cx="592" cy="112" r="2"/><circle cx="608" cy="112" r="2"/><circle cx="624" cy="112" r="2"/>
+</g>
+<rect class="soft lg" x="520" y="208" width="208" height="92"/>
+<rect class="ok md" x="744" y="0" width="40" height="40"/>
+<rect class="ink lg" x="744" y="48" width="144" height="252"/>
+<rect class="ok md" x="904" y="96" width="68" height="96"/>
+<text class="name" x="40" y="214">DigiSign</text>
+<text class="tag" x="40" y="248">Signed documents, kept in the file itself.</text>
+</svg>

@@ -1,11 +1,8 @@
-import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
-import DashboardSquare01Icon from "@hugeicons/core-free-icons/DashboardSquare01Icon";
-import File01Icon from "@hugeicons/core-free-icons/File01Icon";
-import Logout01Icon from "@hugeicons/core-free-icons/Logout01Icon";
-import Search01Icon from "@hugeicons/core-free-icons/Search01Icon";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { FileText, LayoutDashboard, LogOut, Plus, Search } from "lucide-react";
 
+import { Logo } from "#/components/logo.tsx";
+import { ThemeToggle } from "#/components/theme-toggle.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
 	Sidebar,
@@ -22,9 +19,9 @@ import {
 import { authClient } from "#/lib/auth-client.ts";
 
 const NAV = [
-	{ to: "/dashboard", label: "Dashboard", icon: DashboardSquare01Icon },
-	{ to: "/documents", label: "Documents", icon: File01Icon },
-	{ to: "/verify", label: "Check a PDF", icon: Search01Icon },
+	{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+	{ to: "/documents", label: "Documents", icon: FileText },
+	{ to: "/verify", label: "Check a PDF", icon: Search },
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,18 +30,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		<SidebarProvider>
 			<Sidebar collapsible="offcanvas">
 				<SidebarHeader className="gap-4 p-4">
-					<Link
-						to="/dashboard"
-						className="flex items-center gap-2.5 font-semibold text-sidebar-foreground no-underline hover:text-sidebar-foreground"
-					>
-						<span className="grid size-8 place-items-center rounded-lg bg-primary text-sm text-primary-foreground">
-							D
-						</span>
-						DigiSign
-					</Link>
+					<Logo to="/dashboard" />
 					<Button asChild className="w-full">
 						<Link to="/prepare">
-							<HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.75} />
+							<Plus strokeWidth={1.75} />
 							Create a document
 						</Link>
 					</Button>
@@ -62,11 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 									}
 								>
 									<Link to={item.to}>
-										<HugeiconsIcon
-											icon={item.icon}
-											size={16}
-											strokeWidth={1.75}
-										/>
+										<item.icon strokeWidth={1.75} />
 										{item.label}
 									</Link>
 								</SidebarMenuButton>
@@ -75,6 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 					</SidebarMenu>
 				</SidebarContent>
 				<SidebarFooter className="p-2">
+					<ThemeToggle className="w-full justify-start" />
 					<SidebarMenu>
 						<SidebarMenuItem>
 							<SidebarMenuButton
@@ -84,11 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 									});
 								}}
 							>
-								<HugeiconsIcon
-									icon={Logout01Icon}
-									size={16}
-									strokeWidth={1.75}
-								/>
+								<LogOut strokeWidth={1.75} />
 								Sign out
 							</SidebarMenuButton>
 						</SidebarMenuItem>

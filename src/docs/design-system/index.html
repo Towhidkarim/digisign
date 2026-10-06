@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>DigiSign design system</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="tokens.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-sans)}
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;padding:20px 32px;border-bottom:1px solid var(--border);background:var(--surface)}
+h1{margin:0;font:600 20px/28px var(--font-sans)}
+nav a{color:var(--brand-fg);margin-right:16px;font:500 14px/22px var(--font-sans)}
+button{height:36px;padding:0 14px;border-radius:var(--radius-md);border:1px solid var(--border-control);background:var(--surface);color:var(--ink);font:500 13px var(--font-sans);cursor:pointer}
+main{max-width:1000px;margin:0 auto;padding:32px}
+section{margin-bottom:40px}
+h2{font:600 18px/26px var(--font-sans);margin:0 0 4px}
+p.d{color:var(--ink-muted);font:400 13px/20px var(--font-sans);margin:0 0 12px}
+iframe{width:100%;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg)}
+.sw{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.sw div{border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--surface);font:400 12px/16px var(--font-sans)}
+.sw i{display:block;height:44px;border-bottom:1px solid var(--border)}
+.sw b{display:block;padding:8px 10px 0;font-weight:600}.sw span{display:block;padding:0 10px 8px;color:var(--ink-muted)}
+</style></head><body>
+<header><h1>DigiSign design system</h1>
+<nav><a href="README.md">Brand book</a><a href="DESIGN.md">DESIGN.md</a><a href="tokens.json">tokens.json</a></nav>
+<button id="t" type="button">Switch to dark</button></header>
+<main>
+<section><h2>Cover</h2><iframe data-src="cover.html" style="height:300px" title="Cover"></iframe></section>
+<section><h2>Colors</h2><p class="d">Live from tokens.css. Names match the CSS variables.</p><div class="sw" id="sw"></div></section>
+<section><h2>Status badge</h2><iframe data-src="components/StatusBadge/preview.html" style="height:110px" title="Status badge"></iframe></section>
+<section><h2>Button</h2><iframe data-src="components/Button/preview.html" style="height:170px" title="Button"></iframe></section>
+<section><h2>Document row</h2><iframe data-src="components/DocumentRow/preview.html" style="height:330px" title="Document row"></iframe></section>
+</main>
+<script>
+var theme="light",fr=[].slice.call(document.querySelectorAll("iframe"));
+function apply(){document.documentElement.setAttribute("data-theme",theme);fr.forEach(function(f){f.src=f.dataset.src+"?theme="+theme});document.getElementById("t").textContent=theme==="light"?"Switch to dark":"Switch to light"}
+document.getElementById("t").onclick=function(){theme=theme==="light"?"dark":"light";apply()};
+fetch("tokens.json").then(function(r){return r.json()}).then(function(t){
+ document.getElementById("sw").innerHTML=t.color.tokens.filter(function(c){return c.value.light.charAt(0)!=="{"}).map(function(c){return '<div><i style="background:var(--'+c.name+')"></i><b>'+c.name+'</b><span>'+c.value.light+'</span></div>'}).join("")
+}).catch(function(){document.getElementById("sw").textContent="Serve this folder over http to load swatches (for example: npx serve)."});
+apply();
+</script></body></html>

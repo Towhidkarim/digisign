@@ -83,10 +83,10 @@ export function hydrateDraft(): Draft {
 			bytes: cachedBase64 ? base64ToBytes(cachedBase64) : null,
 			upload: upload.data,
 			signers: (signers.length > 0 ? signers : [defaultSigner()]).map(
-				(signer) => ({
+				(signer, index) => ({
 					...signer,
 					email: signer.email ?? "",
-					color: currentSignerColor(signer.color),
+					color: currentSignerColor(signer.color, index),
 				}),
 			),
 			layout: layout.data,
@@ -324,16 +324,10 @@ function emptyDraft(): Draft {
 	};
 }
 
-const retiredSignerColors: Record<string, string> = {
-	"#C4622D": SIGNER_COLORS[0],
-	"#E24B2A": SIGNER_COLORS[0],
-	"#B23A48": SIGNER_COLORS[0],
-	"#2F6B4F": SIGNER_COLORS[1],
-	"#2F5BD6": SIGNER_COLORS[1],
-};
-
-function currentSignerColor(color: string): string {
-	return retiredSignerColors[color] ?? color;
+/** Drafts saved before signer colors became tokens hold hex values; they fall back to the signer's slot. */
+function currentSignerColor(color: string, index: number): string {
+	if ((SIGNER_COLORS as readonly string[]).includes(color)) return color;
+	return SIGNER_COLORS[index % SIGNER_COLORS.length] ?? SIGNER_COLORS[0];
 }
 
 function isSigner(value: unknown): value is EditorSigner {

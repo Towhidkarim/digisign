@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
 
+import { AppHeader } from "#/components/app-header.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { Label } from "#/components/ui/label.tsx";
@@ -46,19 +47,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
 	return (
 		<div className="mx-auto w-[min(64rem,calc(100%-2.5rem))] pt-6 pb-10 text-foreground">
-			<header className="flex items-center justify-between gap-4 pb-4">
-				<Link
-					to="/"
-					className="inline-flex items-center gap-2.5 text-lg font-semibold tracking-tight text-foreground no-underline hover:text-foreground"
-				>
-					<span
-						aria-hidden="true"
-						className="grid size-8 place-items-center rounded-lg bg-primary font-semibold text-primary-foreground"
-					>
-						D
-					</span>
-					DigiSign
-				</Link>
+			<AppHeader>
 				<nav aria-label="Account" className="text-[0.95rem] font-medium">
 					<Link
 						to="/verify"
@@ -67,7 +56,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 						Check a PDF
 					</Link>
 				</nav>
-			</header>
+			</AppHeader>
 
 			<main className="mx-auto w-full max-w-sm py-14">
 				<h1 className="text-[clamp(1.7rem,3vw,2.1rem)] leading-tight font-semibold tracking-tight">

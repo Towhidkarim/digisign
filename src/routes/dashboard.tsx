@@ -1,6 +1,5 @@
-import Add01Icon from "@hugeicons/core-free-icons/Add01Icon";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 
 import { Button } from "#/components/ui/button.tsx";
 import { AppShell } from "#/features/dashboard/app-shell.tsx";
@@ -53,7 +52,7 @@ function DashboardPage() {
 				</div>
 				<Button asChild className="shrink-0">
 					<Link to="/prepare">
-						<HugeiconsIcon icon={Add01Icon} size={16} strokeWidth={1.75} />
+						<Plus strokeWidth={1.75} />
 						Create a document
 					</Link>
 				</Button>

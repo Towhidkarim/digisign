@@ -1,38 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
+import { AppHeader } from "#/components/app-header.tsx";
 import { Button } from "#/components/ui/button.tsx";
 
 export const Route = createFileRoute("/")({ component: Home });
 
 function Home() {
 	return (
-		<div className="mx-auto w-[min(64rem,calc(100%-2.5rem))] pt-6 pb-10 text-[var(--ink)]">
-			<header className="flex items-center justify-between gap-4 pb-4">
-				<Link
-					to="/"
-					className="inline-flex items-center gap-2.5 text-lg font-semibold tracking-tight text-[var(--ink)] no-underline hover:text-[var(--ink)]"
-				>
-					<span
-						aria-hidden="true"
-						className="grid size-8 place-items-center rounded-lg bg-[var(--harbor)] font-semibold text-[var(--paper)]"
-					>
-						D
-					</span>
-					DigiSign
-				</Link>
+		<div className="mx-auto w-[min(64rem,calc(100%-2.5rem))] pt-6 pb-10 text-foreground">
+			<AppHeader>
 				<nav
 					aria-label="Account"
 					className="flex items-center gap-5 text-[0.95rem] font-medium"
 				>
 					<Link
 						to="/verify"
-						className="hidden text-[var(--ink)] no-underline hover:text-[var(--harbor-deep)] sm:inline"
+						className="hidden text-foreground no-underline hover:text-brand-hover sm:inline"
 					>
 						Check a PDF
 					</Link>
 					<Link
 						to="/login"
-						className="hidden text-[var(--ink)] no-underline hover:text-[var(--harbor-deep)] sm:inline"
+						className="hidden text-foreground no-underline hover:text-brand-hover sm:inline"
 					>
 						Sign in
 					</Link>
@@ -40,7 +29,7 @@ function Home() {
 						<Link to="/signup">Create an account</Link>
 					</Button>
 				</nav>
-			</header>
+			</AppHeader>
 
 			<main>
 				<section
@@ -72,7 +61,7 @@ function Home() {
 
 				<section
 					aria-labelledby="landing-how"
-					className="border-t border-[var(--line)] pt-8 pb-10"
+					className="border-t border-border pt-8 pb-10"
 				>
 					<h2
 						id="landing-how"
@@ -109,7 +98,7 @@ function Home() {
 				</section>
 			</main>
 
-			<footer className="flex items-baseline justify-between gap-4 border-t border-[var(--line)] pt-5 text-sm">
+			<footer className="flex items-baseline justify-between gap-4 border-t border-border pt-5 text-sm">
 				<span className="font-semibold">DigiSign</span>
 				<Link to="/verify">Check a signed PDF</Link>
 			</footer>
@@ -139,7 +128,7 @@ function StepPrepare() {
 				width="68"
 				height="76"
 				rx="4"
-				className="fill-[var(--paper)] stroke-[var(--line)]"
+				className="fill-card stroke-border"
 				strokeWidth="1.5"
 			/>
 			<rect
@@ -148,7 +137,7 @@ function StepPrepare() {
 				width="40"
 				height="4"
 				rx="2"
-				className="fill-[var(--tide)]"
+				className="fill-accent"
 			/>
 			<rect
 				x="56"
@@ -156,7 +145,7 @@ function StepPrepare() {
 				width="30"
 				height="4"
 				rx="2"
-				className="fill-[var(--tide)]"
+				className="fill-accent"
 			/>
 			<rect
 				x="56"
@@ -164,12 +153,12 @@ function StepPrepare() {
 				width="48"
 				height="16"
 				rx="3"
-				className="fill-[var(--tide)] stroke-[var(--harbor)]"
+				className="fill-accent stroke-primary"
 				strokeWidth="1.5"
 			/>
 			<path
 				d="M92 42 l4 4 8-9"
-				className="fill-none stroke-[var(--harbor-deep)]"
+				className="fill-none stroke-brand-hover"
 				strokeWidth="2.5"
 				strokeLinecap="round"
 				strokeLinejoin="round"
@@ -187,12 +176,12 @@ function StepLink() {
 				width="84"
 				height="48"
 				rx="6"
-				className="fill-[var(--paper)] stroke-[var(--line)]"
+				className="fill-card stroke-border"
 				strokeWidth="1.5"
 			/>
 			<path
 				d="M30 40 h46 M30 50 h34 M30 60 h24"
-				className="fill-none stroke-[var(--still)]"
+				className="fill-none stroke-ink-subtle"
 				strokeWidth="3"
 				strokeLinecap="round"
 			/>
@@ -200,12 +189,12 @@ function StepLink() {
 				cx="122"
 				cy="48"
 				r="18"
-				className="fill-[var(--tide)] stroke-[var(--harbor)]"
+				className="fill-accent stroke-primary"
 				strokeWidth="1.5"
 			/>
 			<path
 				d="M114 48 h16 M126 44 l6 4 -6 4"
-				className="fill-none stroke-[var(--harbor-deep)]"
+				className="fill-none stroke-brand-hover"
 				strokeWidth="2.5"
 				strokeLinecap="round"
 				strokeLinejoin="round"
@@ -223,12 +212,12 @@ function StepCheck() {
 				width="60"
 				height="72"
 				rx="4"
-				className="fill-[var(--paper)] stroke-[var(--line)]"
+				className="fill-card stroke-border"
 				strokeWidth="1.5"
 			/>
 			<path
 				d="M46 34 h36 M46 44 h26"
-				className="fill-none stroke-[var(--still)]"
+				className="fill-none stroke-ink-subtle"
 				strokeWidth="3"
 				strokeLinecap="round"
 			/>
@@ -236,12 +225,12 @@ function StepCheck() {
 				cx="108"
 				cy="62"
 				r="22"
-				className="fill-[var(--paper)] stroke-[var(--harbor)]"
+				className="fill-card stroke-primary"
 				strokeWidth="2"
 			/>
 			<path
 				d="M99 62 l6 6 13-14"
-				className="fill-none stroke-[var(--harbor-deep)]"
+				className="fill-none stroke-brand-hover"
 				strokeWidth="2.5"
 				strokeLinecap="round"
 				strokeLinejoin="round"
@@ -254,20 +243,20 @@ function DocumentSheet() {
 	return (
 		<figure
 			aria-label="A document with two signatures"
-			className="m-0 rounded-[0.9rem] border border-border bg-card px-6 pt-6 pb-5 shadow-lg"
+			className="m-0 rounded-lg border border-border bg-card px-6 pt-6 pb-5 shadow-lg"
 		>
-			<figcaption className="flex justify-between border-b border-[var(--tide)] pb-3 text-sm font-semibold">
+			<figcaption className="flex justify-between border-b border-border pb-3 text-sm font-semibold">
 				<span>Service agreement</span>
 				<span className="font-normal text-muted-foreground">Page 1 of 4</span>
 			</figcaption>
 			<div aria-hidden="true" className="grid gap-2 py-4">
-				<span className="block h-2 w-[92%] rounded-full bg-[var(--tide)]" />
-				<span className="block h-2 w-[74%] rounded-full bg-[var(--tide)]" />
-				<span className="block h-2 w-[92%] rounded-full bg-[var(--tide)]" />
-				<span className="block h-2 w-[74%] rounded-full bg-[var(--tide)]" />
+				<span className="block h-2 w-[92%] rounded-full bg-accent" />
+				<span className="block h-2 w-[74%] rounded-full bg-accent" />
+				<span className="block h-2 w-[92%] rounded-full bg-accent" />
+				<span className="block h-2 w-[74%] rounded-full bg-accent" />
 			</div>
 			<div className="mt-1 grid grid-cols-2 gap-3">
-				<div className="rounded-lg border border-dashed border-[var(--still)] px-3 pt-2.5 pb-3">
+				<div className="rounded-lg border border-dashed border-ink-subtle px-3 pt-2.5 pb-3">
 					<p className="m-0 text-xs text-muted-foreground">Jordan Hale</p>
 					<svg
 						viewBox="0 0 240 50"
@@ -283,11 +272,9 @@ function DocumentSheet() {
 							d="M10 32 C 22 12, 28 8, 38 18 C 45 27, 48 42, 56 32 C 64 20, 68 10, 77 24 C 84 34, 91 38, 102 26 C 114 14, 128 16, 136 28 C 142 36, 158 32, 175 24 C 188 18, 204 20, 218 16"
 						/>
 					</svg>
-					<small className="block text-[0.72rem] text-[var(--harbor-deep)]">
-						Signed
-					</small>
+					<small className="block text-[0.72rem] text-brand-fg">Signed</small>
 				</div>
-				<div className="rounded-lg border border-dashed border-[var(--still)] px-3 pt-2.5 pb-3">
+				<div className="rounded-lg border border-dashed border-ink-subtle px-3 pt-2.5 pb-3">
 					<p className="m-0 text-xs text-muted-foreground">Amira Solano</p>
 					<em className="mt-4 block text-[0.72rem] font-normal text-muted-foreground not-italic">
 						Waiting

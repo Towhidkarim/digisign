@@ -1,0 +1,31 @@
+<!-- @dsCard group="Actions" height=170 subtitle="One primary per view" -->
+<link rel="stylesheet" href="../../tokens.css"><script>document.documentElement.setAttribute("data-theme",new URLSearchParams(location.search).get("theme")||"light")</script>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:24px;background:var(--bg);color:var(--ink);font-family:var(--font-sans)}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 16px;border-radius:var(--radius-md);font:500 14px/22px var(--font-sans);border:1px solid transparent;cursor:pointer}
+.btn:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.primary{background:var(--brand);color:var(--on-brand)}
+.primary:hover{background:var(--brand-hover)}
+.secondary{background:var(--surface);color:var(--ink);border-color:var(--border-control)}
+.secondary:hover{background:var(--surface-subtle)}
+.ghost{background:transparent;color:var(--ink-muted)}
+.ghost:hover{background:var(--surface-subtle);color:var(--ink)}
+.danger{background:var(--surface);color:var(--danger-fg);border-color:var(--danger)}
+.danger:hover{background:var(--danger-bg)}
+.sm{height:32px;padding:0 12px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+</style>
+<div class="row">
+<button class="btn primary"><svg viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>Send for signature</button>
+<button class="btn secondary">Download PDF</button>
+<button class="btn ghost">Cancel</button>
+<button class="btn danger">Void document</button>
+</div>
+<div class="row">
+<button class="btn primary sm">Create a document</button>
+<button class="btn secondary sm">Copy new signing link</button>
+<button class="btn primary" disabled>Sign and continue</button>
+</div>

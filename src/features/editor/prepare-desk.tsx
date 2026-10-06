@@ -210,8 +210,8 @@ export function PrepareDesk() {
 							}}
 							className={
 								over
-									? "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-[0.9rem] border border-dashed border-primary bg-accent px-6 py-10"
-									: "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-[0.9rem] border border-dashed border-border bg-card px-6 py-10"
+									? "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-lg border border-dashed border-primary bg-accent px-6 py-10"
+									: "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-lg border border-dashed border-border bg-card px-6 py-10"
 							}
 						>
 							<p className="text-lg font-medium">

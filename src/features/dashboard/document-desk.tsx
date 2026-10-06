@@ -181,7 +181,7 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
 								key={event.seq}
 								className={
 									index < document.activity.length - 1
-										? "flex items-start justify-between gap-6 border-b border-[var(--tide)] py-5"
+										? "flex items-start justify-between gap-6 border-b border-border py-5"
 										: "flex items-start justify-between gap-6 py-5"
 								}
 							>
@@ -219,7 +219,7 @@ function SignerRow({
 }) {
 	const evidence = captured(signer);
 	return (
-		<li className={divided ? "border-b border-[var(--tide)] py-5" : "py-5"}>
+		<li className={divided ? "border-b border-border py-5" : "py-5"}>
 			<p className="font-medium">
 				{signer.order}. {signer.name}
 			</p>

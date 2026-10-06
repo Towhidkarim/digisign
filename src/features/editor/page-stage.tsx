@@ -255,8 +255,8 @@ function PageFrame({
 			}}
 			className={
 				isOver
-					? "relative border border-[var(--harbor)] bg-white ring-2 ring-[var(--harbor)]"
-					: "relative border border-border bg-white"
+					? "on-paper relative border border-primary bg-card ring-2 ring-primary"
+					: "on-paper relative border border-border bg-card"
 			}
 			style={{ width: size.width, height: size.height }}
 			onPointerDown={(event) => {
@@ -308,7 +308,7 @@ function FieldBox({
 	dispatch: Dispatch<EditorAction>;
 	gesture: RefObject<Gesture | null>;
 }) {
-	const color = signer?.color ?? "#4E5B3A";
+	const color = signer?.color ?? "var(--signer-6)";
 	const label = FIELD_LABEL[field.kind];
 	const name = signer?.name.trim() || "Signer";
 	const caption = field.kind === "full_name" ? name : label;
@@ -352,7 +352,7 @@ function FieldBox({
 					borderColor: color,
 					borderStyle: field.required ? "solid" : "dashed",
 					borderWidth: selected ? 2 : 1,
-					background: "rgba(255,255,255,0.35)",
+					background: "color-mix(in oklab, var(--card) 35%, transparent)",
 					touchAction: "none",
 				}}
 				onPointerDown={(event) => {
@@ -410,7 +410,7 @@ function FieldBox({
 			) : null}
 			{selected ? (
 				<div
-					className={`absolute left-1/2 z-20 flex -translate-x-1/2 items-center rounded-lg border border-border bg-white p-1 shadow-[0_8px_20px_rgba(18,52,74,0.12)] ${toolbarAbove ? "bottom-full mb-2" : "top-full mt-2"}`}
+					className={`absolute left-1/2 z-20 flex -translate-x-1/2 items-center rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${toolbarAbove ? "bottom-full mb-2" : "top-full mt-2"}`}
 					onPointerDown={(event) => event.stopPropagation()}
 				>
 					<label
@@ -448,7 +448,7 @@ function FieldBox({
 							key={corner}
 							type="button"
 							aria-label={`Resize ${label}`}
-							className="absolute z-10 size-2.5 rounded-full border-2 bg-white"
+							className="absolute z-10 size-2.5 rounded-full border-2 bg-card"
 							style={{
 								borderColor: color,
 								touchAction: "none",

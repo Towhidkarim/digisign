@@ -7,92 +7,116 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-	--desk: #f3f9fd;
-	--paper: #f8fcff;
-	--ink: #12344a;
-	--harbor: #1a7cb5;
-	--still: #5c9bc0;
-	--tide: #d4eef9;
-	--line: #c5e2f0;
-	--harbor-deep: #156a9a;
-
-	--background: var(--desk);
-	--foreground: var(--ink);
-	--card: var(--paper);
-	--card-foreground: var(--ink);
-	--popover: var(--paper);
-	--popover-foreground: var(--ink);
-	--primary: var(--harbor);
-	--primary-foreground: var(--paper);
-	--secondary: var(--tide);
-	--secondary-foreground: var(--ink);
-	--muted: var(--tide);
-	--muted-foreground: #2f5c78;
-	--accent: var(--tide);
-	--accent-foreground: var(--ink);
-	--destructive: #9c2f2f;
-	--destructive-foreground: #f8fcff;
-	--border: var(--line);
-	--input: var(--line);
-	--ring: var(--harbor);
-	--chart-1: #1a7cb5;
-	--chart-2: #3aa0d4;
-	--chart-3: #5c9bc0;
-	--chart-4: #8ec4de;
-	--chart-5: #c5e2f0;
-	--radius: 0.375rem;
-	--sidebar: var(--paper);
-	--sidebar-foreground: var(--ink);
-	--sidebar-primary: var(--harbor);
-	--sidebar-primary-foreground: var(--paper);
-	--sidebar-accent: var(--tide);
-	--sidebar-accent-foreground: var(--ink);
-	--sidebar-border: var(--line);
-	--sidebar-ring: var(--harbor);
+	--radius: 0.5rem;
+	--background: #f5f8fa;
+	--foreground: #10303f;
+	--card: #ffffff;
+	--card-foreground: #10303f;
+	--popover: #ffffff;
+	--popover-foreground: #10303f;
+	--primary: #1a7cb5;
+	--primary-foreground: #ffffff;
+	--secondary: #edf3f7;
+	--secondary-foreground: #10303f;
+	--muted: #edf3f7;
+	--muted-foreground: #456072;
+	--accent: #edf3f7;
+	--accent-foreground: #10303f;
+	--destructive: #b3332c;
+	--border: #dbe6ee;
+	--input: #73909f;
+	--ring: #1a7cb5;
+	--sidebar: #ffffff;
+	--sidebar-foreground: #10303f;
+	--sidebar-primary: #1a7cb5;
+	--sidebar-primary-foreground: #ffffff;
+	--sidebar-accent: #e3f2fa;
+	--sidebar-accent-foreground: #0e5a85;
+	--sidebar-border: #dbe6ee;
+	--sidebar-ring: #1a7cb5;
+	--destructive-foreground: #ffffff;
+	--ink-subtle: #5a7184;
+	--brand-hover: #156a9a;
+	--brand-bg: #e3f2fa;
+	--brand-fg: #0e5a85;
+	--brand-soft: #9fd0ea;
+	--success: #1d7a4b;
+	--success-bg: #e2f4ea;
+	--success-fg: #14603a;
+	--warning: #a35f00;
+	--warning-bg: #fcf0d9;
+	--warning-fg: #7a4700;
+	--danger-bg: #fbe9e7;
+	--danger-fg: #8f2620;
+	--neutral: #5a7184;
+	--neutral-bg: #e8eff4;
+	--neutral-fg: #3b5365;
+	--scrim: rgba(16,48,63,0.45);
+	--signer-1: #c8561a;
+	--signer-2: #0b8a6a;
+	--signer-3: #b8467f;
+	--signer-4: #9a6a00;
+	--signer-5: #6a4bc4;
+	--signer-6: #4f6d7a;
+	--shadow-sm: 0 1px 2px rgba(16,48,63,0.06);
+	--shadow-md: 0 4px 16px rgba(16,48,63,0.10);
+	--shadow-lg: 0 12px 40px rgba(16,48,63,0.18);
 }
 
 .dark {
-	--desk: #071e30;
-	--paper: #0c2a40;
-	--ink: #e8f6ff;
-	--harbor: #8fcbf0;
-	--still: #8ebfda;
-	--tide: #14364e;
-	--line: #1e4a66;
-	--harbor-deep: #d7eef9;
-
-	--background: var(--desk);
-	--foreground: var(--ink);
-	--card: var(--paper);
-	--card-foreground: var(--ink);
-	--popover: var(--paper);
-	--popover-foreground: var(--ink);
-	--primary: var(--harbor);
-	--primary-foreground: #071e30;
-	--secondary: var(--tide);
-	--secondary-foreground: var(--ink);
-	--muted: var(--tide);
-	--muted-foreground: #b7d4e6;
-	--accent: var(--tide);
-	--accent-foreground: var(--ink);
-	--destructive: #e7a3a3;
-	--destructive-foreground: #071e30;
-	--border: var(--line);
-	--input: var(--line);
-	--ring: var(--harbor);
-	--chart-1: #8fcbf0;
-	--chart-2: #5c9bc0;
-	--chart-3: #1a7cb5;
-	--chart-4: #d4eef9;
-	--chart-5: #1e4a66;
-	--sidebar: var(--paper);
-	--sidebar-foreground: var(--ink);
-	--sidebar-primary: var(--harbor);
-	--sidebar-primary-foreground: #071e30;
-	--sidebar-accent: var(--tide);
-	--sidebar-accent-foreground: var(--ink);
-	--sidebar-border: var(--line);
-	--sidebar-ring: var(--harbor);
+	--background: #08202f;
+	--foreground: #e9f5fc;
+	--card: #0e2c3e;
+	--card-foreground: #e9f5fc;
+	--popover: #0e2c3e;
+	--popover-foreground: #e9f5fc;
+	--primary: #6ab8e6;
+	--primary-foreground: #06202f;
+	--secondary: #143a50;
+	--secondary-foreground: #e9f5fc;
+	--muted: #143a50;
+	--muted-foreground: #b4cfe0;
+	--accent: #143a50;
+	--accent-foreground: #e9f5fc;
+	--destructive: #f08b83;
+	--border: #1e4a66;
+	--input: #5f8aa5;
+	--ring: #6ab8e6;
+	--sidebar: #0e2c3e;
+	--sidebar-foreground: #e9f5fc;
+	--sidebar-primary: #6ab8e6;
+	--sidebar-primary-foreground: #06202f;
+	--sidebar-accent: #12425d;
+	--sidebar-accent-foreground: #a9dcf6;
+	--sidebar-border: #1e4a66;
+	--sidebar-ring: #6ab8e6;
+	--destructive-foreground: #06202f;
+	--ink-subtle: #8fb0c6;
+	--brand-hover: #8fcdf0;
+	--brand-bg: #12425d;
+	--brand-fg: #a9dcf6;
+	--brand-soft: #2f6f94;
+	--success: #5fcf94;
+	--success-bg: #12402b;
+	--success-fg: #9be5bd;
+	--warning: #f0b13d;
+	--warning-bg: #4a3410;
+	--warning-fg: #f7cf86;
+	--danger-bg: #4d1f1c;
+	--danger-fg: #f7b8b2;
+	--neutral: #8fb0c6;
+	--neutral-bg: #1b3f55;
+	--neutral-fg: #c3d9e8;
+	--scrim: rgba(2,12,18,0.65);
+	--signer-1: #f08a52;
+	--signer-2: #3cc9a0;
+	--signer-3: #e58ab8;
+	--signer-4: #e0b04a;
+	--signer-5: #a58cf0;
+	--signer-6: #9db8c6;
+	--shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+	--shadow-md: 0 4px 16px rgba(0,0,0,0.5);
+	--shadow-lg: 0 12px 40px rgba(0,0,0,0.6);
 }
 
 @theme inline {
@@ -116,15 +140,6 @@
 	--color-border: var(--border);
 	--color-input: var(--input);
 	--color-ring: var(--ring);
-	--color-chart-1: var(--chart-1);
-	--color-chart-2: var(--chart-2);
-	--color-chart-3: var(--chart-3);
-	--color-chart-4: var(--chart-4);
-	--color-chart-5: var(--chart-5);
-	--radius-sm: calc(var(--radius) - 2px);
-	--radius-md: var(--radius);
-	--radius-lg: calc(var(--radius) + 2px);
-	--radius-xl: calc(var(--radius) + 6px);
 	--color-sidebar: var(--sidebar);
 	--color-sidebar-foreground: var(--sidebar-foreground);
 	--color-sidebar-primary: var(--sidebar-primary);
@@ -133,6 +148,44 @@
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-ring: var(--sidebar-ring);
+	--color-ink-subtle: var(--ink-subtle);
+	--color-brand-hover: var(--brand-hover);
+	--color-brand-bg: var(--brand-bg);
+	--color-brand-fg: var(--brand-fg);
+	--color-brand-soft: var(--brand-soft);
+	--color-success: var(--success);
+	--color-success-bg: var(--success-bg);
+	--color-success-fg: var(--success-fg);
+	--color-warning: var(--warning);
+	--color-warning-bg: var(--warning-bg);
+	--color-warning-fg: var(--warning-fg);
+	--color-danger-bg: var(--danger-bg);
+	--color-danger-fg: var(--danger-fg);
+	--color-neutral: var(--neutral);
+	--color-neutral-bg: var(--neutral-bg);
+	--color-neutral-fg: var(--neutral-fg);
+	--color-scrim: var(--scrim);
+	--color-signer-1: var(--signer-1);
+	--color-signer-2: var(--signer-2);
+	--color-signer-3: var(--signer-3);
+	--color-signer-4: var(--signer-4);
+	--color-signer-5: var(--signer-5);
+	--color-signer-6: var(--signer-6);
+	--radius-sm: 6px;
+	--radius-md: 8px;
+	--radius-lg: 12px;
+	--radius-xl: 16px;
+	--shadow-sm: var(--shadow-sm);
+	--shadow-md: var(--shadow-md);
+	--shadow-lg: var(--shadow-lg);
+}
+
+/* A PDF page is always white paper. Ink, fields and typed signatures drawn on it keep light-theme values in dark mode. */
+.on-paper {
+	color-scheme: light;
+	--card: #ffffff;
+	--foreground: #10303f;
+	--muted-foreground: #456072;
 }
 
 html,
@@ -145,7 +198,7 @@ body {
 	margin: 0;
 	color: var(--foreground);
 	font-family: var(--font-sans);
-	background: var(--desk);
+	background: var(--background);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 }
@@ -155,8 +208,8 @@ button {
 
 code {
 	font-size: 0.9em;
-	border: 1px solid var(--line);
-	background: var(--paper);
+	border: 1px solid var(--border);
+	background: var(--card);
 	border-radius: 4px;
 	padding: 1px 6px;
 }
@@ -164,9 +217,9 @@ code {
 .sheet {
 	width: min(40rem, calc(100% - 2rem));
 	margin: 4.5rem auto;
-	background: var(--paper);
-	color: var(--ink);
-	border: 1px solid var(--line);
+	background: var(--card);
+	color: var(--foreground);
+	border: 1px solid var(--border);
 	border-radius: 1rem;
 	padding: 2.75rem 2.5rem 2.5rem;
 }
@@ -178,7 +231,7 @@ code {
 	letter-spacing: -0.02em;
 	line-height: 1.1;
 	margin: 0;
-	color: var(--harbor);
+	color: var(--primary);
 }
 
 .doc-title {
@@ -188,7 +241,7 @@ code {
 	line-height: 1.25;
 	letter-spacing: -0.015em;
 	margin: 1.75rem 0 0.75rem;
-	color: var(--harbor);
+	color: var(--primary);
 }
 
 .sheet p {
@@ -208,7 +261,7 @@ code {
 	list-style: none;
 	margin: 1.5rem 0 0;
 	padding: 0;
-	border-top: 1px solid var(--line);
+	border-top: 1px solid var(--border);
 }
 
 .probe-list li {
@@ -216,18 +269,18 @@ code {
 	grid-template-columns: 7rem 1fr;
 	gap: 1rem;
 	padding: 0.75rem 0;
-	border-bottom: 1px solid var(--line);
+	border-bottom: 1px solid var(--border);
 	font-size: 0.95rem;
 }
 
 .probe-list li span:first-child {
-	color: var(--still);
+	color: var(--ink-subtle);
 }
 
 .status-line {
 	margin-top: 1.25rem;
 	min-height: 1.5rem;
-	color: var(--ink);
+	color: var(--foreground);
 }
 
 .status-line.is-error {

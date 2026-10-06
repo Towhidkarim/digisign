@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { cn } from "cn";
-
 import { Button } from "#/components/ui/button.tsx";
+import { cn } from "#/lib/utils.ts";
 
 export function EmptyDocuments({
 	className,

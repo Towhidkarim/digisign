@@ -7,7 +7,7 @@ export function DocumentsPending() {
 			<p className="sr-only">Loading documents</p>
 			<Skeleton className="h-9 w-40" />
 			<Skeleton className="mt-3 h-4 w-56" />
-			<div className="mt-10 overflow-hidden rounded-[0.9rem] border border-border bg-card px-6">
+			<div className="mt-10 overflow-hidden rounded-lg border border-border bg-card px-6">
 				<Skeleton className="my-5 h-12 w-full" />
 				<Skeleton className="my-5 h-12 w-full" />
 				<Skeleton className="my-5 h-12 w-full" />
@@ -28,11 +28,11 @@ export function DocumentPending() {
 				<Skeleton className="h-8 w-28" />
 				<Skeleton className="h-8 w-28" />
 			</div>
-			<div className="mt-10 rounded-[0.9rem] border border-border bg-card px-6 py-2">
+			<div className="mt-10 rounded-lg border border-border bg-card px-6 py-2">
 				<Skeleton className="my-5 h-12 w-full" />
 				<Skeleton className="my-5 h-12 w-full" />
 			</div>
-			<div className="mt-10 rounded-[0.9rem] border border-border bg-card px-6 py-2">
+			<div className="mt-10 rounded-lg border border-border bg-card px-6 py-2">
 				<Skeleton className="my-5 h-12 w-full" />
 				<Skeleton className="my-5 h-12 w-full" />
 				<Skeleton className="my-5 h-12 w-full" />
@@ -57,7 +57,7 @@ export function DeskSkeleton({ sheet = false }: { sheet?: boolean }) {
 				<Skeleton className="h-9 w-48" />
 				<Skeleton className="mt-3 h-4 w-56" />
 				{sheet ? (
-					<div className="mt-10 overflow-hidden rounded-[0.9rem] border border-border bg-card px-6">
+					<div className="mt-10 overflow-hidden rounded-lg border border-border bg-card px-6">
 						<Skeleton className="my-5 h-12 w-full" />
 						<Skeleton className="my-5 h-12 w-full" />
 						<Skeleton className="my-5 h-12 w-full" />

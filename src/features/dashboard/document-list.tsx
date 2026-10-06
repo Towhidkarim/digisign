@@ -1,6 +1,4 @@
 import { Link, useRouter } from "@tanstack/react-router";
-import { cn } from "cn";
-
 import { Button } from "#/components/ui/button.tsx";
 import {
 	displayTitle,
@@ -9,6 +7,7 @@ import {
 	statusLabel,
 	statusTone,
 } from "#/features/dashboard/format.ts";
+import { cn } from "#/lib/utils.ts";
 import type { OwnedDocument } from "#/server/domain/documents.ts";
 
 export function DocumentList({
@@ -24,7 +23,7 @@ export function DocumentList({
 						key={document.id}
 						className={
 							index < documents.length - 1
-								? "border-b border-[var(--tide)]"
+								? "border-b border-border"
 								: undefined
 						}
 					>
@@ -91,7 +90,7 @@ export function DocumentSheet({
 	return (
 		<div
 			className={cn(
-				"mt-10 overflow-hidden rounded-[0.9rem] border border-border bg-card px-6",
+				"mt-10 overflow-hidden rounded-lg border border-border bg-card px-6",
 				className,
 			)}
 		>

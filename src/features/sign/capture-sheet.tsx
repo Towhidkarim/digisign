@@ -20,6 +20,11 @@ import {
 } from "#/features/sign/saved-signature.ts";
 import { installScriptFaces, SCRIPT_FACE } from "#/pdf/fonts.ts";
 
+/** The pen follows the pad's text color, which stays dark ink on white paper in either theme. */
+function ink(frame: HTMLElement): string {
+	return getComputedStyle(frame).color;
+}
+
 export function CaptureSheet({
 	title,
 	existing,
@@ -76,12 +81,10 @@ export function CaptureSheet({
 	}
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-end justify-center bg-[rgba(18,52,74,0.35)] p-4 sm:items-center">
-			<div className="flex w-full max-w-xl flex-col gap-4 rounded-2xl bg-white p-4 shadow-[0_16px_40px_rgba(18,52,74,0.18)]">
+		<div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim p-4 sm:items-center">
+			<div className="flex w-full max-w-xl flex-col gap-4 rounded-xl bg-card p-4 text-card-foreground shadow-lg">
 				<div className="flex items-center justify-between gap-3">
-					<h2 className="text-lg font-semibold text-[var(--harbor)]">
-						{title}
-					</h2>
+					<h2 className="text-lg font-semibold text-primary">{title}</h2>
 					<button
 						type="button"
 						className="text-sm text-muted-foreground hover:underline"
@@ -94,7 +97,7 @@ export function CaptureSheet({
 					<button
 						type="button"
 						aria-pressed={mode === "drawn"}
-						className="rounded-md px-3 py-1.5 text-sm aria-pressed:bg-[var(--tide)]"
+						className="rounded-md px-3 py-1.5 text-sm aria-pressed:bg-accent"
 						onClick={() => setMode("drawn")}
 					>
 						Draw
@@ -102,7 +105,7 @@ export function CaptureSheet({
 					<button
 						type="button"
 						aria-pressed={mode === "typed"}
-						className="rounded-md px-3 py-1.5 text-sm aria-pressed:bg-[var(--tide)]"
+						className="rounded-md px-3 py-1.5 text-sm aria-pressed:bg-accent"
 						onClick={() => setMode("typed")}
 					>
 						Type
@@ -112,7 +115,7 @@ export function CaptureSheet({
 					<div className="flex flex-wrap items-center gap-2 text-sm">
 						<button
 							type="button"
-							className="rounded-md border border-black/10 px-3 py-1.5"
+							className="rounded-md border border-input px-3 py-1.5"
 							onClick={() => fillFromSaved(saved)}
 						>
 							Use saved signature
@@ -141,11 +144,11 @@ export function CaptureSheet({
 							value={typed}
 							maxLength={limits.typedSignatureChars}
 							placeholder="Type your name"
-							className="h-12 rounded-md border border-black/10 px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							className="h-12 rounded-md border border-input px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							onChange={(event) => setTyped(event.target.value)}
 						/>
 						<div
-							className="relative aspect-[3/1] w-full rounded-md border border-black/10 bg-white"
+							className="on-paper relative aspect-[3/1] w-full rounded-md border border-input bg-card text-foreground"
 							aria-live="polite"
 						>
 							<FittedScript
@@ -167,7 +170,7 @@ export function CaptureSheet({
 									type="button"
 									role="option"
 									aria-selected={font === name}
-									className="relative h-14 overflow-hidden rounded-md border border-black/10 aria-selected:border-[var(--harbor)] aria-selected:bg-[var(--tide)]"
+									className="relative h-14 overflow-hidden rounded-md border border-input aria-selected:border-primary aria-selected:bg-accent"
 									onClick={() => setFont(name)}
 								>
 									<FittedScript
@@ -182,7 +185,7 @@ export function CaptureSheet({
 						</div>
 						<button
 							type="button"
-							className="self-start rounded-md bg-[var(--harbor)] px-3 py-2 text-sm text-white disabled:opacity-40"
+							className="self-start rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
 							disabled={typed.trim().length === 0}
 							onClick={() => {
 								try {
@@ -233,7 +236,7 @@ function DrawPad({
 		const frame = frameRef.current;
 		if (!canvas || !frame) return;
 		const pad = new SignaturePad(canvas, {
-			penColor: "#12344A",
+			penColor: ink(frame),
 			minWidth: 0.8,
 			maxWidth: 2.4,
 		});
@@ -258,7 +261,7 @@ function DrawPad({
 			);
 			pad.fromData(
 				groups.map((points) => ({
-					penColor: "#12344A",
+					penColor: ink(frame),
 					dotSize: 0,
 					minWidth: 0.8,
 					maxWidth: 2.4,
@@ -305,7 +308,7 @@ function DrawPad({
 		<div className="flex flex-col gap-3">
 			<div
 				ref={frameRef}
-				className="overflow-hidden rounded-md border border-black/10 bg-white"
+				className="on-paper overflow-hidden rounded-md border border-input bg-card text-foreground"
 			>
 				<canvas
 					ref={canvasRef}
@@ -331,7 +334,7 @@ function DrawPad({
 				</button>
 				<button
 					type="button"
-					className="rounded-md bg-[var(--harbor)] px-3 py-2 text-sm text-white"
+					className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground"
 					onClick={() => {
 						rememberInk();
 						const packed = packedRef.current;

@@ -3,6 +3,7 @@ import { Asterisk } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page } from "react-pdf";
 
+import { AppHeader } from "#/components/app-header.tsx";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -68,11 +69,9 @@ export function SigningDesk() {
 	if (error || !context) {
 		return (
 			<main className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-16">
-				<h1 className="text-2xl font-semibold text-[var(--harbor)]">
-					Nothing to sign
-				</h1>
+				<h1 className="text-2xl font-semibold text-primary">Nothing to sign</h1>
 				<p className="text-sm text-foreground">{error}</p>
-				<Link to="/prepare" className="text-sm text-[var(--harbor)]">
+				<Link to="/prepare" className="text-sm text-primary">
 					Prepare a document
 				</Link>
 			</main>
@@ -81,14 +80,12 @@ export function SigningDesk() {
 	if (context.status === "declined") {
 		return (
 			<main className="mx-auto flex max-w-lg flex-col gap-4 px-6 py-16">
-				<h1 className="text-2xl font-semibold text-[var(--harbor)]">
-					Signing stopped
-				</h1>
+				<h1 className="text-2xl font-semibold text-primary">Signing stopped</h1>
 				<p className="text-sm text-foreground">
 					{context.signer.name} declined this document.
 					{context.declineReason ? ` ${context.declineReason}` : ""}
 				</p>
-				<Link to="/" className="text-sm text-[var(--harbor)]">
+				<Link to="/" className="text-sm text-primary">
 					Back home
 				</Link>
 			</main>
@@ -212,14 +209,7 @@ function Walk({
 
 	return (
 		<div className="flex h-svh flex-col bg-background">
-			<header className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
-				<Link
-					to="/"
-					className="text-lg font-semibold tracking-tight"
-					style={{ color: "var(--harbor)", textDecoration: "none" }}
-				>
-					DigiSign
-				</Link>
+			<AppHeader bordered className="justify-start gap-2">
 				<p className="min-w-0 flex-1 truncate text-sm text-foreground">
 					{context.signer.name} · signer {context.signerIndex + 1} of{" "}
 					{context.signerCount}
@@ -232,10 +222,10 @@ function Walk({
 				>
 					Next required field
 				</button>
-				<Link to="/prepare" className="text-sm text-[var(--harbor)]">
+				<Link to="/prepare" className="text-sm text-primary">
 					Back to prepare
 				</Link>
-			</header>
+			</AppHeader>
 			<div ref={scrollerRef} className="min-h-0 flex-1 overflow-auto">
 				{file ? (
 					<Document
@@ -260,7 +250,7 @@ function Walk({
 									<div
 										key={pageIndexKey(index)}
 										data-page-index={index}
-										className="relative border border-border bg-white"
+										className="on-paper relative border border-border bg-card"
 										style={{ width, height }}
 									>
 										<Page
@@ -346,7 +336,7 @@ function Walk({
 				</button>
 				<button
 					type="button"
-					className="rounded-md bg-[var(--harbor)] px-3 py-2 text-sm text-white disabled:opacity-40"
+					className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
 					disabled={busy}
 					onClick={() => void sign()}
 				>
@@ -385,7 +375,7 @@ function Walk({
 					<textarea
 						value={reason}
 						maxLength={500}
-						className="min-h-24 w-full rounded-md border border-black/10 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+						className="min-h-24 w-full rounded-md border border-input px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
 						onChange={(event) => setReason(event.target.value)}
 					/>
 					<AlertDialogFooter>
@@ -474,13 +464,11 @@ function Finished({ context }: { context: SigningContext }) {
 
 	return (
 		<div className="flex h-svh flex-col bg-background">
-			<header className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-3 py-3">
-				<h1 className="text-lg font-semibold text-[var(--harbor)]">
-					Document signed
-				</h1>
+			<AppHeader bordered className="justify-start gap-3">
+				<h1 className="text-lg font-semibold text-primary">Document signed</h1>
 				<button
 					type="button"
-					className="rounded-md bg-[var(--harbor)] px-3 py-2 text-sm text-white disabled:opacity-40"
+					className="rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground disabled:opacity-40"
 					disabled={!bytes}
 					onClick={() => {
 						if (bytes) downloadPdf(bytes, context.fileName);
@@ -489,10 +477,10 @@ function Finished({ context }: { context: SigningContext }) {
 					Download PDF
 				</button>
 				<ZoomControls zoom={zoom} onZoom={setZoom} />
-				<Link to="/" className="text-sm text-[var(--harbor)]">
+				<Link to="/" className="text-sm text-primary">
 					Back home
 				</Link>
-			</header>
+			</AppHeader>
 			{message ? (
 				<p className="px-3 py-3 text-sm text-muted-foreground">{message}</p>
 			) : null}
@@ -558,7 +546,7 @@ function SignerField({
 		borderColor: color,
 		borderStyle: field.required ? "solid" : "dashed",
 		borderWidth: focused ? 2 : 1,
-		background: "rgba(255,255,255,0.35)",
+		background: "color-mix(in oklab, var(--card) 35%, transparent)",
 	} as const;
 
 	return (
@@ -694,7 +682,11 @@ function InkGraphic({
 		);
 		const stroke = inkStrokeWidth(value.signature.box, fieldW, fieldH);
 		return (
-			<svg viewBox={`0 0 ${fieldW} ${fieldH}`} className="h-full w-full" aria-hidden>
+			<svg
+				viewBox={`0 0 ${fieldW} ${fieldH}`}
+				className="h-full w-full"
+				aria-hidden
+			>
 				<title>Signature</title>
 				{groups.map((group) => (
 					<polyline
@@ -703,7 +695,7 @@ function InkGraphic({
 							.map((point) => `${point.x * fieldW},${point.y * fieldH}`)
 							.join(" ")}
 						fill="none"
-						stroke="#12344A"
+						stroke="currentColor"
 						strokeWidth={stroke}
 						strokeLinecap="round"
 						strokeLinejoin="round"
@@ -731,7 +723,7 @@ function InkGraphic({
 				<polyline
 					points={points}
 					fill="none"
-					stroke="#12344A"
+					stroke="currentColor"
 					strokeWidth="0.12"
 					strokeLinecap="round"
 					strokeLinejoin="round"

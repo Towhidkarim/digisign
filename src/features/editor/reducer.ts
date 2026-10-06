@@ -8,17 +8,14 @@ import {
 } from "#/core/coords.ts";
 import { type FieldKind, limits, minFieldSizePt } from "#/core/limits.ts";
 
+/** Signer identity colors are theme tokens (--signer-1 to --signer-6); the 7th to 10th signer reuse them. */
 export const SIGNER_COLORS = [
-	"#F08A1E",
-	"#2E8B57",
-	"#3B5BDB",
-	"#6B3FA0",
-	"#C8960A",
-	"#0E7C86",
-	"#8A5A2B",
-	"#4E5B3A",
-	"#3D6B8A",
-	"#6E4A86",
+	"var(--signer-1)",
+	"var(--signer-2)",
+	"var(--signer-3)",
+	"var(--signer-4)",
+	"var(--signer-5)",
+	"var(--signer-6)",
 ] as const;
 
 export const FIELD_LABEL: Record<FieldKind, string> = {
