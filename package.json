@@ -51,6 +51,7 @@
 		"react-dom": "^19.2.0",
 		"react-pdf": "^11.0.0",
 		"signature_pad": "^5.1.4",
+		"sonner": "^2.0.8",
 		"tailwind-merge": "^3.0.2",
 		"tailwindcss": "^4.1.18",
 		"tw-animate-css": "^1.3.6",

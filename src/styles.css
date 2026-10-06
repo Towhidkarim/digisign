@@ -192,6 +192,16 @@
 	--text-subheading--line-height: 1.375rem;
 	--text-small: 0.8125rem;
 	--text-small--line-height: 1.25rem;
+
+	--animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
+	@keyframes indeterminate {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(250%);
+		}
+	}
 }
 
 /* A PDF page is always white paper. Ink, fields and typed signatures drawn on it keep light-theme values in dark mode. */

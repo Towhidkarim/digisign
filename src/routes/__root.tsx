@@ -10,6 +10,7 @@ import {
 	ThemeProvider,
 	themeInitScript,
 } from "#/components/theme-provider.tsx";
+import { Toaster } from "#/components/ui/sonner.tsx";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import appCss from "../styles.css?url";
 
@@ -50,7 +51,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 				<HeadContent />
 			</head>
 			<body>
-				<ThemeProvider>{children}</ThemeProvider>
+				<ThemeProvider>
+					{children}
+					<Toaster />
+				</ThemeProvider>
 				<TanStackDevtools
 					config={{
 						position: "bottom-right",

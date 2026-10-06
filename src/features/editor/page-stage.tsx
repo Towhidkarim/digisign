@@ -1,5 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
-import { Asterisk, X } from "lucide-react";
+import { Asterisk, Trash2 } from "lucide-react";
 import {
 	type CSSProperties,
 	type Dispatch,
@@ -62,6 +62,8 @@ export function PageStage({
 	dispatch,
 	onPageChange,
 	onViewError,
+	jumpTo,
+	onScale,
 }: {
 	file: Blob;
 	state: EditorState;
@@ -69,6 +71,10 @@ export function PageStage({
 	dispatch: Dispatch<EditorAction>;
 	onPageChange: (pageNumber: number) => void;
 	onViewError: (message: string) => void;
+	/** Scrolls to a page (1-based). A new `nonce` repeats a jump to the same page. */
+	jumpTo?: { page: number; nonce: number } | null;
+	/** Reports the zoom in use, in percent, including while a fit mode is on. */
+	onScale?: (percent: number) => void;
 }) {
 	const rootRef = useRef<HTMLDivElement>(null);
 	const nodes = useRef(new Map<number, HTMLDivElement>());
@@ -118,12 +124,31 @@ export function PageStage({
 	}, [onPageChange]);
 
 	useEffect(() => {
+		if (!jumpTo) return;
+		nodes.current
+			.get(jumpTo.page - 1)
+			?.scrollIntoView({ block: "start", behavior: "auto" });
+	}, [jumpTo]);
+
+	useEffect(() => {
+		const first = state.geometry[0];
+		if (!first || !onScale) return;
+		const { viewW } = viewSize(first);
+		const width = pagePixels(first, zoom, frame).width;
+		if (viewW > 0) onScale((width / (viewW * CSS_PX_PER_PT)) * 100);
+	}, [onScale, state.geometry, zoom, frame]);
+
+	useEffect(() => {
 		function onKeyDown(event: KeyboardEvent) {
 			const target = event.target;
 			if (
 				target instanceof HTMLElement &&
 				target.closest("input, textarea, select")
 			) {
+				return;
+			}
+			if (event.key === "Escape" && state.selectedFieldId) {
+				dispatch({ type: "select-field", id: null });
 				return;
 			}
 			const meta = event.ctrlKey || event.metaKey;
@@ -168,7 +193,7 @@ export function PageStage({
 	}, [dispatch, state.fields, state.selectedFieldId]);
 
 	return (
-		<div ref={rootRef} className="min-h-0 flex-1 overflow-auto bg-background">
+		<div ref={rootRef} className="min-h-0 flex-1 overflow-auto bg-muted">
 			<Document
 				file={file}
 				suspense={false}
@@ -189,26 +214,33 @@ export function PageStage({
 					)
 				}
 			>
-				<div className="flex flex-col items-center gap-6 px-6 py-6">
+				<div className="flex flex-col items-center gap-8 px-6 py-8">
 					{state.geometry.map((page, index) => {
 						const size = pagePixels(page, zoom, frame);
 						sizes.current.set(index, size);
 						return (
-							<PageFrame
+							<div
 								key={pageKey(index)}
-								index={index}
-								size={size}
-								drawn={near.has(index)}
-								dpr={dpr}
-								fields={state.fields.filter(
-									(field) => field.pageIndex === index,
-								)}
-								signers={state.signers}
-								selectedFieldId={state.selectedFieldId}
-								dispatch={dispatch}
-								gesture={gesture}
-								nodes={nodes}
-							/>
+								className="flex flex-col items-center gap-2"
+							>
+								<p className="text-small text-muted-foreground">
+									Page {index + 1}
+								</p>
+								<PageFrame
+									index={index}
+									size={size}
+									drawn={near.has(index)}
+									dpr={dpr}
+									fields={state.fields.filter(
+										(field) => field.pageIndex === index,
+									)}
+									signers={state.signers}
+									selectedFieldId={state.selectedFieldId}
+									dispatch={dispatch}
+									gesture={gesture}
+									nodes={nodes}
+								/>
+							</div>
 						);
 					})}
 				</div>
@@ -255,8 +287,8 @@ function PageFrame({
 			}}
 			className={
 				isOver
-					? "on-paper relative border border-primary bg-card ring-2 ring-primary"
-					: "on-paper relative border border-border bg-card"
+					? "on-paper relative scroll-mt-10 border border-primary bg-card shadow-sm ring-2 ring-primary"
+					: "on-paper relative scroll-mt-10 border border-border bg-card shadow-sm"
 			}
 			style={{ width: size.width, height: size.height }}
 			onPointerDown={(event) => {
@@ -347,13 +379,19 @@ function FieldBox({
 			<button
 				type="button"
 				aria-label={`${label} for ${name}, page ${field.pageIndex + 1}`}
-				className="flex h-full w-full cursor-grab items-center justify-center overflow-hidden rounded-sm border px-1 text-center text-xs text-foreground"
+				className="flex h-full w-full cursor-grab items-center justify-center overflow-hidden rounded-sm border px-1 text-center text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card"
 				style={{
 					borderColor: color,
 					borderStyle: field.required ? "solid" : "dashed",
-					borderWidth: selected ? 2 : 1,
-					background: "color-mix(in oklab, var(--card) 35%, transparent)",
+					borderWidth: selected ? 2 : 1.5,
+					background: `color-mix(in oklab, ${color} 10%, transparent)`,
 					touchAction: "none",
+				}}
+				onFocus={() => {
+					if (!selected) dispatch({ type: "select-field", id: field.id });
+				}}
+				onClick={() => {
+					if (!selected) dispatch({ type: "select-field", id: field.id });
 				}}
 				onPointerDown={(event) => {
 					event.stopPropagation();
@@ -410,12 +448,12 @@ function FieldBox({
 			) : null}
 			{selected ? (
 				<div
-					className={`absolute left-1/2 z-20 flex -translate-x-1/2 items-center rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${toolbarAbove ? "bottom-full mb-2" : "top-full mt-2"}`}
+					className={`absolute left-1/2 z-20 flex -translate-x-1/2 items-center rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${toolbarAbove ? "bottom-full mb-3" : "top-full mt-3"}`}
 					onPointerDown={(event) => event.stopPropagation()}
 				>
 					<label
 						htmlFor={`required-${field.id}`}
-						className="flex items-center gap-1.5 px-1.5"
+						className="flex min-h-8 cursor-pointer items-center gap-2 px-2"
 					>
 						<Switch
 							id={`required-${field.id}`}
@@ -435,10 +473,10 @@ function FieldBox({
 					<button
 						type="button"
 						aria-label={`Remove ${label}`}
-						className="flex size-7 items-center justify-center rounded-md text-foreground hover:bg-accent"
+						className="flex size-8 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
 						onClick={() => dispatch({ type: "delete", id: field.id })}
 					>
-						<X className="size-3.5" />
+						<Trash2 className="size-4" strokeWidth={1.75} />
 					</button>
 				</div>
 			) : null}
@@ -448,9 +486,8 @@ function FieldBox({
 							key={corner}
 							type="button"
 							aria-label={`Resize ${label}`}
-							className="absolute z-10 size-2.5 rounded-full border-2 bg-card"
+							className="absolute z-10 grid size-6 place-items-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
 							style={{
-								borderColor: color,
 								touchAction: "none",
 								cursor:
 									corner === "nw" || corner === "se"
@@ -493,7 +530,13 @@ function FieldBox({
 							onPointerUp={() => {
 								if (gesture.current?.id === field.id) gesture.current = null;
 							}}
-						/>
+						>
+							<span
+								aria-hidden="true"
+								className="size-2.5 rounded-full border-2 bg-card"
+								style={{ borderColor: color }}
+							/>
+						</button>
 					))
 				: null}
 		</div>
@@ -536,12 +579,12 @@ function resized(
 
 function cornerStyle(corner: Corner): CSSProperties {
 	if (corner === "nw")
-		return { left: 0, top: 0, transform: "translate(-40%, -40%)" };
+		return { left: 0, top: 0, transform: "translate(-50%, -50%)" };
 	if (corner === "ne")
-		return { right: 0, top: 0, transform: "translate(40%, -40%)" };
+		return { right: 0, top: 0, transform: "translate(50%, -50%)" };
 	if (corner === "sw")
-		return { left: 0, bottom: 0, transform: "translate(-40%, 40%)" };
-	return { right: 0, bottom: 0, transform: "translate(40%, 40%)" };
+		return { left: 0, bottom: 0, transform: "translate(-50%, 50%)" };
+	return { right: 0, bottom: 0, transform: "translate(50%, 50%)" };
 }
 
 function pagePixels(

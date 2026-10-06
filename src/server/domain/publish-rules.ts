@@ -7,8 +7,12 @@ import {
 } from "#/core/contracts/index.ts";
 import { footerStripMicro, ptToMicro, viewSize } from "#/core/coords.ts";
 import { limits, minFieldSizePt } from "#/core/limits.ts";
+import {
+	emailPattern,
+	isSigningKind,
+	SIGNER_MESSAGES,
+} from "#/core/signer-rules.ts";
 
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const geometryList = z.array(pageGeometrySchema);
 
 export type PublishSigner = {
@@ -45,9 +49,9 @@ export function publishBlocker(input: {
 	}
 	const signerIds = new Set<string>();
 	for (const signer of input.signers) {
-		if (!signer.name.trim()) return "Every signer needs a name.";
+		if (!signer.name.trim()) return SIGNER_MESSAGES.name;
 		if (!emailPattern.test(signer.email.trim())) {
-			return "Every signer needs an email address.";
+			return SIGNER_MESSAGES.email;
 		}
 		signerIds.add(signer.id);
 	}
@@ -73,13 +77,13 @@ export function publishBlocker(input: {
 			return "A page has too many fields.";
 		}
 		perPage.set(field.pageIndex, count);
-		if (field.kind === "signature" || field.kind === "initials") {
+		if (isSigningKind(field.kind)) {
 			signed.add(field.signerId);
 		}
 	}
 	for (const signer of input.signers) {
 		if (!signed.has(signer.id)) {
-			return "Every signer needs a signature or initials field.";
+			return SIGNER_MESSAGES.signature;
 		}
 	}
 	return null;

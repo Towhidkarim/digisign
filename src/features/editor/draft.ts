@@ -97,11 +97,16 @@ export function hydrateDraft(): Draft {
 	return draft;
 }
 
-export async function initUpload(file: {
-	name: string;
-	bytes: Uint8Array;
-}): Promise<UploadInit> {
+export type UploadPhase = "reading" | "saving";
+
+export async function initUpload(
+	file: { name: string; bytes: Uint8Array },
+	/** Tells the screen which stage is running. Does not change what runs or in what order. */
+	onPhase?: (phase: UploadPhase) => void,
+): Promise<UploadInit> {
+	onPhase?.("reading");
 	const upload = await readUpload(file.bytes);
+	onPhase?.("saving");
 	const title = (file.name || "Document").replace(/\.pdf$/i, "") || "Document";
 	const created = await createDraftFn({
 		data: { id: upload.documentId, title },

@@ -1,4 +1,5 @@
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Send } from "lucide-react";
 import {
 	Suspense,
 	useCallback,
@@ -8,6 +9,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { toast } from "sonner";
 
 import {
 	AlertDialog,
@@ -19,8 +21,15 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "#/components/ui/alert-dialog.tsx";
-import { Button } from "#/components/ui/button.tsx";
-import { limits } from "#/core/limits.ts";
+import {
+	Sheet,
+	SheetContent,
+	SheetDescription,
+	SheetTitle,
+} from "#/components/ui/sheet.tsx";
+import { type FieldKind, limits } from "#/core/limits.ts";
+import { checkSigners } from "#/core/signer-rules.ts";
+import { ulid } from "#/core/ulid.ts";
 import { displayTitle } from "#/features/dashboard/format.ts";
 import { DeskDrag } from "#/features/editor/desk-drag.tsx";
 import {
@@ -36,6 +45,15 @@ import {
 	savePreparation,
 	saveSigners,
 } from "#/features/editor/draft.ts";
+import {
+	EditorHeader,
+	type SaveState,
+} from "#/features/editor/editor-header.tsx";
+import { EditorToolbar } from "#/features/editor/editor-toolbar.tsx";
+import {
+	MobileHeader,
+	MobileReview,
+} from "#/features/editor/mobile-review.tsx";
 import { PageStage, type Zoom } from "#/features/editor/page-stage.tsx";
 import {
 	createEditorState,
@@ -43,10 +61,15 @@ import {
 	SIGNER_COLORS,
 	toSaveLayout,
 } from "#/features/editor/reducer.ts";
+import { ReviewDialog } from "#/features/editor/review-dialog.tsx";
 import { SignerRail } from "#/features/editor/signer-rail.tsx";
+import { countProblems } from "#/features/editor/summary.ts";
+import {
+	type ReadingStep,
+	UploadStage,
+} from "#/features/editor/upload-stage.tsx";
+import { useMediaQuery } from "#/hooks/use-media-query.ts";
 import { PdfLoadError, pdfMessages } from "#/pdf/load.ts";
-
-const PERCENTS = [50, 75, 100, 125, 150, 200] as const;
 
 export function PrepareDesk() {
 	const fileRef = useRef<HTMLInputElement>(null);
@@ -66,6 +89,10 @@ export function PrepareDesk() {
 	const [resume, setResume] = useState<Draft | null>(null);
 	const [phase, setPhase] = useState<"idle" | "reading" | "opening">("idle");
 	const [error, setError] = useState("");
+	const [step, setStep] = useState<ReadingStep>("checking");
+	const [picked, setPicked] = useState<{ name: string; size: number } | null>(
+		null,
+	);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -117,13 +144,15 @@ export function PrepareDesk() {
 
 	async function openFile(file: File) {
 		setError("");
+		setPicked({ name: file.name, size: file.size });
+		setStep("checking");
 		setPhase("reading");
 		try {
 			if (file.size > limits.pdfSizeBytes) {
 				throw new PdfLoadError(pdfMessages.tooBig);
 			}
 			const bytes = new Uint8Array(await file.arrayBuffer());
-			await initUpload({ name: file.name, bytes });
+			await initUpload({ name: file.name, bytes }, setStep);
 			setSession({ ...getDraft() });
 		} catch (caught) {
 			setError(
@@ -163,90 +192,48 @@ export function PrepareDesk() {
 					viewError={error}
 				/>
 			) : (
-				<main className="flex flex-1 flex-col px-6 pt-6 md:px-10 md:pt-10">
-					<Link
-						to="/dashboard"
-						className="text-sm font-medium text-primary no-underline hover:text-primary"
-					>
-						Dashboard
-					</Link>
-					<div className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center pb-16">
-						<h1 className="text-[clamp(1.7rem,3vw,2.1rem)] font-semibold tracking-tight">
-							Choose a PDF
-						</h1>
-						<p className="mt-3 max-w-[42ch] leading-relaxed text-muted-foreground">
-							Place the fields, name who signs and in what order, then send.
-							Until you send, the document stays a draft.
-						</p>
-						{session.upload && !session.bytes ? (
-							<p className="mt-4 max-w-[42ch] text-sm text-muted-foreground">
-								This document was too large to keep in the tab. Choose the PDF
-								again.
-							</p>
-						) : null}
-						<label
-							htmlFor="prepare-pdf"
-							onDragEnter={(event) => {
-								event.preventDefault();
-								dragDepth.current += 1;
-								setOver(true);
-							}}
-							onDragOver={(event) => {
-								event.preventDefault();
-								event.dataTransfer.dropEffect = "copy";
-							}}
-							onDragLeave={() => {
-								dragDepth.current -= 1;
-								if (dragDepth.current <= 0) {
-									dragDepth.current = 0;
-									setOver(false);
-								}
-							}}
-							onDrop={(event) => {
-								event.preventDefault();
+				<UploadStage
+					inputId="prepare-pdf"
+					fileRef={fileRef}
+					phase={phase}
+					step={step}
+					picked={picked}
+					over={over}
+					error={error}
+					needsFile={session.upload !== null && !session.bytes}
+					resume={
+						resume?.upload && resume.bytes && !requestedId
+							? { title: displayTitle(resume.fileName) || "Draft" }
+							: null
+					}
+					onResume={() => {
+						if (resume) setSession({ ...resume, bytes: resume.bytes });
+					}}
+					dragHandlers={{
+						onDragEnter: (event) => {
+							event.preventDefault();
+							dragDepth.current += 1;
+							setOver(true);
+						},
+						onDragOver: (event) => {
+							event.preventDefault();
+							event.dataTransfer.dropEffect = "copy";
+						},
+						onDragLeave: () => {
+							dragDepth.current -= 1;
+							if (dragDepth.current <= 0) {
 								dragDepth.current = 0;
 								setOver(false);
-								takeFile(event.dataTransfer.files[0]);
-							}}
-							className={
-								over
-									? "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-lg border border-dashed border-primary bg-accent px-6 py-10"
-									: "mt-8 flex min-h-52 cursor-pointer flex-col justify-center rounded-lg border border-dashed border-border bg-card px-6 py-10"
 							}
-						>
-							<p className="text-lg font-medium">
-								{phase === "opening"
-									? "Opening the draft…"
-									: phase === "reading"
-										? "Reading the PDF…"
-										: over
-											? "Drop it to open"
-											: "Drop a PDF here"}
-							</p>
-							<p className="mt-2 max-w-[36ch] text-sm text-muted-foreground">
-								Or click to choose a file from this computer.
-							</p>
-						</label>
-						{resume?.upload && resume.bytes && !requestedId ? (
-							<button
-								type="button"
-								className="mt-4 w-fit text-sm font-medium text-primary"
-								disabled={phase !== "idle"}
-								onClick={() => setSession({ ...resume, bytes: resume.bytes })}
-							>
-								Continue {displayTitle(resume.fileName) || "draft"}
-							</button>
-						) : null}
-						{error ? (
-							<p
-								className="mt-4 max-w-[42ch] text-sm text-destructive"
-								role="alert"
-							>
-								{error}
-							</p>
-						) : null}
-					</div>
-				</main>
+						},
+						onDrop: (event) => {
+							event.preventDefault();
+							dragDepth.current = 0;
+							setOver(false);
+							takeFile(event.dataTransfer.files[0]);
+						},
+					}}
+				/>
 			)}
 		</div>
 	);
@@ -290,14 +277,22 @@ function Editor({
 	const navigate = useNavigate();
 	const [sent, setSent] = useState(false);
 	const [sentOpen, setSentOpen] = useState(false);
+	const [reviewOpen, setReviewOpen] = useState(false);
+	// Phone: a review screen with no stage. Tablet: the stage plus a signer drawer. Desktop: both.
+	const phone = useMediaQuery("(max-width: 767px)");
+	const desktop = useMediaQuery("(min-width: 1024px)");
+	const [railOpen, setRailOpen] = useState(false);
+	const [revealErrors, setRevealErrors] = useState(false);
 	const [sending, setSending] = useState(false);
-	const [saveState, setSaveState] = useState<"saving" | "saved" | "error" | "">(
-		"",
-	);
+	const [saveState, setSaveState] = useState<SaveState>("");
 	const [invited, setInvited] = useState<
 		{ id: string; name: string; email: string }[]
 	>([]);
 	const [zoom, setZoom] = useState<Zoom>({ mode: "fit-width" });
+	const [scale, setScale] = useState(100);
+	const [jump, setJump] = useState<{ page: number; nonce: number } | null>(
+		null,
+	);
 	const [pageNumber, setPageNumber] = useState(1);
 	const [drawnError, setDrawnError] = useState("");
 	const [notice, setNotice] = useState("");
@@ -373,6 +368,7 @@ function Editor({
 					if (result.error.includes("no longer be edited")) {
 						lockedRef.current = true;
 						setSent(true);
+						setReviewOpen(false);
 						setSentOpen(true);
 						setSaveState("saved");
 						return;
@@ -430,6 +426,45 @@ function Editor({
 		});
 	}
 
+	/** Click or keyboard add. The same "place" action a drop uses, on the page in view. */
+	function addField(kind: FieldKind) {
+		if (lockedRef.current || sent) return;
+		const current = stateRef.current;
+		if (!current.selectedSignerId) return;
+		if (current.fields.length >= limits.fieldsPerDocument) {
+			toast(
+				"This document has reached its limit of " +
+					limits.fieldsPerDocument +
+					" fields.",
+			);
+			return;
+		}
+		const pageIndex = Math.min(Math.max(pageNumber, 1), upload.pageCount) - 1;
+		const onPage = current.fields.filter(
+			(field) => field.pageIndex === pageIndex,
+		).length;
+		if (onPage >= limits.fieldsPerPage) {
+			toast(
+				"Page " +
+					(pageIndex + 1) +
+					" has reached its limit of " +
+					limits.fieldsPerPage +
+					" fields.",
+			);
+			return;
+		}
+		// Centre of the page, nudged for each field already there so new ones do not stack.
+		const nudge = (onPage % 8) * 20_000;
+		dispatch({
+			type: "place",
+			id: ulid(),
+			kind,
+			pageIndex,
+			x: 500_000 + nudge,
+			y: 500_000 + nudge,
+		});
+	}
+
 	async function send() {
 		if (lockedRef.current || sendingRef.current) return;
 		sendingRef.current = true;
@@ -448,6 +483,7 @@ function Editor({
 			setSending(false);
 			setSaveState("error");
 			setNotice(saved.error);
+			setReviewOpen(false);
 			return;
 		}
 		const published = await publishDocument(current.documentId);
@@ -455,10 +491,12 @@ function Editor({
 			sendingRef.current = false;
 			setSending(false);
 			setNotice(published.error);
+			setReviewOpen(false);
 			return;
 		}
 		lockedRef.current = true;
 		setSent(true);
+		setReviewOpen(false);
 		setSentOpen(true);
 		setSaveState("saved");
 		setSending(false);
@@ -484,120 +522,86 @@ function Editor({
 		}
 	}
 
+	const rail = (
+		<SignerRail
+			signers={state.signers}
+			selectedSignerId={state.selectedSignerId}
+			fields={state.fields}
+			dispatch={dispatch}
+			onAddField={addField}
+			revealErrors={revealErrors}
+		/>
+	);
+	const desk = desktop ? rail : null;
+
 	return (
 		<>
-			<header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-card px-3 py-2 md:px-4">
-				<Button
-					type="button"
-					variant="ghost"
-					size="sm"
-					onClick={() => void leave()}
-				>
-					Close
-				</Button>
-				<p className="min-w-0 max-w-[20ch] truncate text-sm font-medium sm:max-w-[32ch]">
-					{fileName || "Document"}
-				</p>
-				<p
-					className={
-						saveState === "error"
-							? "text-sm text-destructive"
-							: "text-sm text-muted-foreground"
+			{phone ? (
+				<MobileHeader
+					fileName={fileName}
+					saveText={
+						sent
+							? ""
+							: saveState === "saving"
+								? "Saving draft…"
+								: saveState === "saved"
+									? "Draft saved"
+									: saveState === "error"
+										? "Draft not saved"
+										: ""
 					}
-				>
-					{sent
-						? ""
-						: saveState === "saving"
-							? "Saving draft…"
-							: saveState === "saved"
-								? "Draft saved"
-								: saveState === "error"
-									? "Draft not saved"
-									: ""}
-				</p>
-				<div className="ml-auto flex flex-wrap items-center gap-1">
-					<p className="px-1 text-sm text-muted-foreground tabular-nums">
-						Page {pageNumber} of {upload.pageCount}
-					</p>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						aria-pressed={zoom.mode === "fit-width"}
-						className="aria-pressed:bg-secondary"
-						onClick={() => setZoom({ mode: "fit-width" })}
-					>
-						Fit width
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						aria-pressed={zoom.mode === "fit-page"}
-						className="aria-pressed:bg-secondary"
-						onClick={() => setZoom({ mode: "fit-page" })}
-					>
-						Fit page
-					</Button>
-					<label className="text-sm text-foreground">
-						<span className="sr-only">Zoom</span>
-						<select
-							className="h-8 rounded-md border border-border bg-background px-2"
-							value={zoom.mode === "percent" ? String(zoom.percent) : ""}
-							onChange={(event) =>
-								setZoom({
-									mode: "percent",
-									percent: Number(event.target.value),
-								})
-							}
-						>
-							<option value="" disabled>
-								Zoom
-							</option>
-							{PERCENTS.map((percent) => (
-								<option key={percent} value={percent}>
-									{percent}%
-								</option>
-							))}
-						</select>
-					</label>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						disabled={sent || state.past.length === 0}
-						onClick={() => dispatch({ type: "undo" })}
-					>
-						Undo
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						disabled={sent || state.future.length === 0}
-						onClick={() => dispatch({ type: "redo" })}
-					>
-						Redo
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						disabled={sending}
-						onClick={onReplace}
-					>
-						Choose another PDF
-					</Button>
-					<Button
-						type="button"
-						size="sm"
-						disabled={sent || sending}
-						onClick={() => void send()}
-					>
-						{sending ? "Sending…" : "Send for signature"}
-					</Button>
-				</div>
-			</header>
+					saveError={saveState === "error"}
+					sending={sending}
+					onClose={() => void leave()}
+					onReplace={onReplace}
+				/>
+			) : (
+				<>
+					<EditorHeader
+						fileName={fileName}
+						saveText={
+							sent
+								? ""
+								: saveState === "saving"
+									? "Saving draft…"
+									: saveState === "saved"
+										? "Draft saved"
+										: saveState === "error"
+											? "Draft not saved"
+											: ""
+						}
+						saveState={saveState}
+						problems={countProblems(state.signers, state.fields)}
+						sent={sent}
+						sending={sending}
+						onClose={() => void leave()}
+						onReplace={onReplace}
+						onSend={() => {
+							setRevealErrors(true);
+							setReviewOpen(true);
+						}}
+					/>
+					<EditorToolbar
+						pageNumber={pageNumber}
+						pageCount={upload.pageCount}
+						zoom={zoom}
+						scale={scale}
+						locked={sent}
+						canUndo={state.past.length > 0}
+						canRedo={state.future.length > 0}
+						onJump={(page) =>
+							setJump((current) => ({ page, nonce: (current?.nonce ?? 0) + 1 }))
+						}
+						onZoom={setZoom}
+						onUndo={() => dispatch({ type: "undo" })}
+						onRedo={() => dispatch({ type: "redo" })}
+						onToggleRail={
+							desktop ? undefined : () => setRailOpen((open) => !open)
+						}
+						railOpen={railOpen}
+					/>
+				</>
+			)}
 			{viewError || drawnError ? (
 				<p
 					className="border-b border-border px-3 py-2 text-sm text-destructive"
@@ -626,46 +630,98 @@ function Editor({
 					</button>
 				</p>
 			) : null}
-			<DeskDrag
-				signers={state.signers}
-				fieldColor={
-					state.signers.find((signer) => signer.id === state.selectedSignerId)
-						?.color ?? SIGNER_COLORS[0]
-				}
-				dispatch={dispatch}
-			>
-				<div
-					className="flex min-h-0 flex-1 flex-row"
-					inert={sent ? true : undefined}
+			{phone ? (
+				<MobileReview
+					file={file}
+					fileName={fileName}
+					pageCount={upload.pageCount}
+					signers={state.signers}
+					fields={state.fields}
+					checks={checkSigners(state.signers, state.fields)}
+					revealErrors={revealErrors}
+					locked={sent}
+					sending={sending}
+					dispatch={dispatch}
+					onReview={() => {
+						setRevealErrors(true);
+						setReviewOpen(true);
+					}}
+				/>
+			) : (
+				<DeskDrag
+					signers={state.signers}
+					fieldColor={
+						state.signers.find((signer) => signer.id === state.selectedSignerId)
+							?.color ?? SIGNER_COLORS[0]
+					}
+					dispatch={dispatch}
 				>
-					<SignerRail
-						signers={state.signers}
-						selectedSignerId={state.selectedSignerId}
-						dispatch={dispatch}
-					/>
-					<div className="flex min-h-0 min-w-0 flex-1">
-						<Suspense
-							fallback={
-								<p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-									Opening the PDF…
-								</p>
-							}
-						>
-							<PageStage
-								file={file}
-								state={state}
-								zoom={zoom}
-								dispatch={dispatch}
-								onPageChange={setPageNumber}
-								onViewError={setDrawnError}
-							/>
-						</Suspense>
+					<div
+						className="flex min-h-0 flex-1 flex-row"
+						inert={sent ? true : undefined}
+					>
+						{desk}
+						<div className="flex min-h-0 min-w-0 flex-1">
+							<Suspense
+								fallback={
+									<p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+										Opening the PDF…
+									</p>
+								}
+							>
+								<PageStage
+									file={file}
+									state={state}
+									zoom={zoom}
+									dispatch={dispatch}
+									onPageChange={setPageNumber}
+									onViewError={setDrawnError}
+									jumpTo={jump}
+									onScale={setScale}
+								/>
+							</Suspense>
+						</div>
 					</div>
-				</div>
-			</DeskDrag>
+					{desktop ? null : (
+						<Sheet open={railOpen} onOpenChange={setRailOpen} modal={false}>
+							<SheetContent
+								side="left"
+								showCloseButton={false}
+								aria-describedby={undefined}
+								className="w-80 max-w-none gap-0 p-0"
+								style={{ top: "6.5rem", bottom: 0, height: "auto" }}
+								onInteractOutside={(event) => event.preventDefault()}
+							>
+								<SheetTitle className="sr-only">Signers and fields</SheetTitle>
+								<SheetDescription className="sr-only">
+									Add signers and drag fields onto the page.
+								</SheetDescription>
+								{rail}
+							</SheetContent>
+						</Sheet>
+					)}
+				</DeskDrag>
+			)}
+			<ReviewDialog
+				open={reviewOpen && !sent}
+				onOpenChange={setReviewOpen}
+				fileName={fileName}
+				pageCount={upload.pageCount}
+				fieldCount={state.fields.length}
+				signers={state.signers}
+				checks={checkSigners(state.signers, state.fields)}
+				sending={sending}
+				onSend={() => void send()}
+			/>
 			<AlertDialog open={sentOpen} onOpenChange={setSentOpen}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
+						<span
+							aria-hidden="true"
+							className="mx-auto mb-1 grid size-14 place-items-center rounded-full bg-success-bg text-success-fg"
+						>
+							<Send className="size-6" strokeWidth={1.75} />
+						</span>
 						<AlertDialogTitle>Sent for signature</AlertDialogTitle>
 						<AlertDialogDescription>
 							{nextName
