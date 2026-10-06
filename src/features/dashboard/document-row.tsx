@@ -48,10 +48,29 @@ function When({ updatedAt }: { updatedAt: number }) {
 	);
 }
 
-/**
- * One document in a list. The title link covers the whole row; "Continue editing"
- * (drafts only) sits above it and shows on hover where hover exists, always on touch.
- */
+/** Always visible for drafts: the editor is the next step, so it should not wait for a hover. */
+function ContinueEditing({
+	id,
+	className,
+}: {
+	id: string;
+	className?: string;
+}) {
+	return (
+		<Button
+			asChild
+			variant="outline"
+			size="sm"
+			className={cn("relative z-10 shrink-0 text-primary", className)}
+		>
+			<Link to="/prepare" search={{ documentId: id }}>
+				Continue editing
+			</Link>
+		</Button>
+	);
+}
+
+/** One document in a list. The title link covers the whole row; draft rows also carry a "Continue editing" button above it. */
 export function DocumentRow({ document }: { document: OwnedDocument }) {
 	const status = isDocumentStatus(document.status) ? document.status : "draft";
 	const muted = status === "voided" || status === "declined";
@@ -85,23 +104,17 @@ export function DocumentRow({ document }: { document: OwnedDocument }) {
 					<When updatedAt={document.updatedAt} />
 				</div>
 				<Progress signers={document.signers} signed={document.signed} />
+				{status === "draft" ? (
+					<ContinueEditing id={document.id} className="mt-3 md:hidden" />
+				) : null}
 			</div>
+			{status === "draft" ? (
+				<ContinueEditing id={document.id} className="hidden md:inline-flex" />
+			) : null}
 			<div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">
 				<StatusBadge status={status} />
 				<When updatedAt={document.updatedAt} />
 			</div>
-			{status === "draft" ? (
-				<Button
-					asChild
-					variant="ghost"
-					size="sm"
-					className="relative z-10 hidden shrink-0 text-primary group-focus-within:opacity-100 md:inline-flex [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
-				>
-					<Link to="/prepare" search={{ documentId: document.id }}>
-						Continue editing
-					</Link>
-				</Button>
-			) : null}
 			<ChevronRight
 				aria-hidden="true"
 				className="mt-2 size-5 shrink-0 text-ink-subtle md:mt-0"
