@@ -16,6 +16,8 @@ import {
   listOwnedDocuments,
   publish,
   readOwnedDocument,
+  renameDraft,
+  renameDraftInputSchema,
   saveLayout,
   savePreparation,
   savePreparationInputSchema,
@@ -111,6 +113,14 @@ export const initUploadFn = createServerFn({ method: 'POST' })
       await initUpload({ ownerId: (await resolveActor()).id, upload: data });
       return { ok: true as const };
     }),
+  );
+
+export const renameDraftFn = createServerFn({ method: 'POST' })
+  .validator(renameDraftInputSchema)
+  .handler(async ({ data }) =>
+    settle(async () =>
+      renameDraft({ ownerId: (await resolveActor()).id, ...data }),
+    ),
   );
 
 export const saveSignersFn = createServerFn({ method: 'POST' })

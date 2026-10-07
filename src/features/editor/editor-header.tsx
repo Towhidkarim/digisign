@@ -14,6 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '#/components/ui/tooltip.tsx';
+import { TitleField } from '#/features/editor/title-field.tsx';
 
 export type SaveState = 'saving' | 'saved' | 'error' | '';
 
@@ -30,8 +31,11 @@ export function EditorHeader({
   onClose,
   onReplace,
   onSend,
+  onRename,
 }: {
   fileName: string;
+  /** Saves a new name. Returns an error message, or null when it worked. */
+  onRename: (title: string) => Promise<string | null>;
   /** The existing copy: "Saving draft…", "Draft saved", "Draft not saved", or empty. */
   saveText: string;
   saveState: SaveState;
@@ -59,9 +63,12 @@ export function EditorHeader({
           <X strokeWidth={1.75} />
         </Button>
         <div className="min-w-0">
-          <p className="max-w-[24ch] truncate text-sm font-semibold sm:max-w-[32ch]">
-            {fileName || 'Document'}
-          </p>
+          <TitleField
+            value={fileName}
+            disabled={sent || sending}
+            onRename={onRename}
+            className="max-w-[24ch] sm:max-w-[32ch]"
+          />
           {saveText ? (
             <p
               className={

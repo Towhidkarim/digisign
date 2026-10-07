@@ -32,6 +32,11 @@ export const createDraftInputSchema = z.strictObject({
   title: z.string().trim().min(1).max(200),
 });
 
+export const renameDraftInputSchema = z.strictObject({
+  documentId: ulidSchema,
+  title: createDraftInputSchema.shape.title,
+});
+
 export const saveSignersInputSchema = z.strictObject({
   documentId: ulidSchema,
   layoutVersion: z.number().int().nonnegative(),
@@ -93,6 +98,35 @@ export async function createDraft(input: {
     throw error;
   }
   return { documentId: input.id };
+}
+
+/**
+ * Renames a draft. The title is only frozen once the document is published, so this needs no
+ * audit event. `version` is left alone so a rename never makes an upload or layout save fail.
+ */
+export async function renameDraft(input: {
+  ownerId: string;
+  documentId: string;
+  title: string;
+  now?: number;
+}): Promise<{ title: string }> {
+  const title = renameDraftInputSchema.shape.title.parse(input.title);
+  await ownedDraft(input.documentId, input.ownerId);
+  const changed = await getDb()
+    .update(documents)
+    .set({ title, updatedAt: input.now ?? Date.now() })
+    .where(
+      and(
+        eq(documents.id, input.documentId),
+        eq(documents.ownerId, input.ownerId),
+        eq(documents.status, 'draft'),
+      ),
+    )
+    .returning({ id: documents.id });
+  if (changed.length === 0) {
+    throw new AppError(409, 'This document can no longer be edited.');
+  }
+  return { title };
 }
 
 export async function getDraft(documentId: string, ownerId: string) {

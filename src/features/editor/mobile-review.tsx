@@ -41,6 +41,7 @@ import {
 } from '#/features/editor/reducer.ts';
 import { emailMessage } from '#/features/editor/signer-rail.tsx';
 import { summarizeSigner, summaryLine } from '#/features/editor/summary.ts';
+import { TitleField } from '#/features/editor/title-field.tsx';
 import { cn } from '#/lib/utils.ts';
 import '#/pdf/setup.ts';
 
@@ -52,8 +53,10 @@ export function MobileHeader({
   sending,
   onClose,
   onReplace,
+  onRename,
 }: {
   fileName: string;
+  onRename: (title: string) => Promise<string | null>;
   saveText: string;
   saveError: boolean;
   sending: boolean;
@@ -73,9 +76,7 @@ export function MobileHeader({
         <X strokeWidth={1.75} />
       </Button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">
-          {fileName || 'Document'}
-        </p>
+        <TitleField value={fileName} disabled={sending} onRename={onRename} />
         <p
           className={cn(
             'truncate text-xs',

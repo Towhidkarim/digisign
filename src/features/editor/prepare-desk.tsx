@@ -40,6 +40,7 @@ import {
   initUpload,
   loadServerDraft,
   publishDocument,
+  renameDocument,
   resumeServerDraft,
   saveLayout,
   savePreparation,
@@ -240,7 +241,7 @@ export function PrepareDesk() {
 }
 
 function Editor({
-  fileName,
+  fileName: savedFileName,
   bytes,
   upload,
   signers,
@@ -275,6 +276,16 @@ function Editor({
       }),
   );
   const navigate = useNavigate();
+  const [fileName, setFileName] = useState(savedFileName);
+  const rename = useCallback(
+    async (title: string): Promise<string | null> => {
+      const result = await renameDocument(upload.documentId, title);
+      if ('error' in result) return result.error;
+      setFileName(result.title);
+      return null;
+    },
+    [upload.documentId],
+  );
   const [sent, setSent] = useState(false);
   const [sentOpen, setSentOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -539,6 +550,7 @@ function Editor({
       {phone ? (
         <MobileHeader
           fileName={fileName}
+          onRename={rename}
           saveText={
             sent
               ? ''
@@ -559,6 +571,7 @@ function Editor({
         <>
           <EditorHeader
             fileName={fileName}
+            onRename={rename}
             saveText={
               sent
                 ? ''

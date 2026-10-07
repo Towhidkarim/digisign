@@ -13,6 +13,7 @@ import {
   initUploadFn,
   publishFn,
   reissueInviteFn,
+  renameDraftFn,
   savePreparationFn,
 } from '#/server/documents.ts';
 
@@ -168,6 +169,20 @@ export async function savePreparation(input: {
       layout: { ...draft.layout, layoutVersion: result.layoutVersion },
       signers: input.signers.map((signer) => ({ ...signer })),
     };
+  }
+  return result;
+}
+
+/** Renames the draft on the server, then in this tab's copy. Returns the stored title. */
+export async function renameDocument(
+  documentId: string,
+  title: string,
+): Promise<{ title: string } | { error: string }> {
+  const result = await renameDraftFn({ data: { documentId, title } });
+  if ('error' in result) return result;
+  if (draft.upload?.documentId === documentId) {
+    draft = { ...draft, fileName: result.title };
+    persist();
   }
   return result;
 }
