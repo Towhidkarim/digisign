@@ -3,5 +3,8 @@
 MANIFEST_SIGNING_KEY=
 RESEND_API_KEY=
 MAIL_FROM=
+# Gmail with an app password (myaccount.google.com/apppasswords). Used before Resend when set.
+SMTP_USER=
+SMTP_PASS=
 BETTER_AUTH_URL=http://localhost:3000
 BETTER_AUTH_SECRET=

@@ -12,6 +12,8 @@ interface __BaseEnv_Env {
 	DATABASE_URL: string;
 	RESEND_API_KEY: string;
 	MAIL_FROM: string;
+	SMTP_USER: string;
+	SMTP_PASS: string;
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
@@ -24,7 +26,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "APP_ORIGIN" | "MANIFEST_SIGNING_KEY" | "BETTER_AUTH_URL" | "BETTER_AUTH_SECRET" | "DATABASE_URL" | "RESEND_API_KEY" | "MAIL_FROM">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "APP_ORIGIN" | "MANIFEST_SIGNING_KEY" | "BETTER_AUTH_URL" | "BETTER_AUTH_SECRET" | "DATABASE_URL" | "RESEND_API_KEY" | "MAIL_FROM" | "SMTP_USER" | "SMTP_PASS">> {}
 }
 
 // Begin runtime types

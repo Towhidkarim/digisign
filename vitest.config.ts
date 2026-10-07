@@ -27,7 +27,7 @@ export default defineConfig({
 					cloudflareTest({
 						wrangler: { configPath: "./wrangler.test.jsonc" },
 						// .dev.vars holds the real Resend key. Tests must never send mail.
-						miniflare: { bindings: { RESEND_API_KEY: "", MAIL_FROM: "" } },
+						miniflare: { bindings: { RESEND_API_KEY: "", MAIL_FROM: "", SMTP_USER: "", SMTP_PASS: "" } },
 					}),
 				],
 				resolve: { tsconfigPaths: true },
