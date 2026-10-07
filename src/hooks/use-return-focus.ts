@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef } from 'react';
 
 /**
  * Radix only puts focus back on a `Trigger`. These dialogs are opened from ordinary buttons,
@@ -6,19 +6,19 @@ import { useCallback, useRef } from "react";
  * on close. A caller that handles `onCloseAutoFocus` itself (and prevents the default) wins.
  */
 export function useReturnFocus(
-	onCloseAutoFocus?: (event: Event) => void,
+  onCloseAutoFocus?: (event: Event) => void,
 ): (event: Event) => void {
-	const opener = useRef<Element | null>(
-		typeof document === "undefined" ? null : document.activeElement,
-	);
-	return useCallback(
-		(event: Event) => {
-			onCloseAutoFocus?.(event);
-			if (event.defaultPrevented) return;
-			event.preventDefault();
-			const target = opener.current;
-			if (target instanceof HTMLElement && target.isConnected) target.focus();
-		},
-		[onCloseAutoFocus],
-	);
+  const opener = useRef<Element | null>(
+    typeof document === 'undefined' ? null : document.activeElement,
+  );
+  return useCallback(
+    (event: Event) => {
+      onCloseAutoFocus?.(event);
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      const target = opener.current;
+      if (target instanceof HTMLElement && target.isConnected) target.focus();
+    },
+    [onCloseAutoFocus],
+  );
 }

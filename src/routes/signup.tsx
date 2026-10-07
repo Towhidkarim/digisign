@@ -1,12 +1,12 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
-import { AuthForm } from "#/features/auth/auth-form.tsx";
-import { getSessionFn } from "#/server/session.ts";
+import { AuthForm } from '#/features/auth/auth-form.tsx';
+import { getSessionFn } from '#/server/session.ts';
 
-export const Route = createFileRoute("/signup")({
-	ssr: false,
-	beforeLoad: async () => {
-		if (await getSessionFn()) throw redirect({ to: "/dashboard" });
-	},
-	component: () => <AuthForm mode="signup" />,
+export const Route = createFileRoute('/signup')({
+  ssr: false,
+  beforeLoad: async () => {
+    if (await getSessionFn()) throw redirect({ to: '/dashboard' });
+  },
+  component: () => <AuthForm mode="signup" />,
 });

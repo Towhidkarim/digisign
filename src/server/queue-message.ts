@@ -1,3 +1,3 @@
 export type QueueProbeMessage = {
-	note: string;
+  note: string;
 };

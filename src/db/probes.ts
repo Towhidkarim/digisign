@@ -1,11 +1,11 @@
-import { getDb } from "#/db/index.ts";
-import { runtimeProbes } from "#/db/schema/index.ts";
+import { getDb } from '#/db/index.ts';
+import { runtimeProbes } from '#/db/schema/index.ts';
 
 export async function insertProbe(kind: string, payload: string) {
-	const db = getDb();
-	await db.insert(runtimeProbes).values({
-		kind,
-		payload,
-		createdAt: Date.now(),
-	});
+  const db = getDb();
+  await db.insert(runtimeProbes).values({
+    kind,
+    payload,
+    createdAt: Date.now(),
+  });
 }

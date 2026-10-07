@@ -1,6 +1,6 @@
-const monthName = new Intl.DateTimeFormat("en", {
-	month: "short",
-	timeZone: "UTC",
+const monthName = new Intl.DateTimeFormat('en', {
+  month: 'short',
+  timeZone: 'UTC',
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -10,8 +10,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * it) and the browser (which previews it) cannot disagree because of a time zone.
  */
 export function formatSignedAt(signedAt: number): string {
-	const date = new Date(signedAt);
-	return `${ordinal(date.getUTCDate())} ${monthName.format(date)}, ${date.getUTCFullYear()}`;
+  const date = new Date(signedAt);
+  return `${ordinal(date.getUTCDate())} ${monthName.format(date)}, ${date.getUTCFullYear()}`;
 }
 
 /**
@@ -20,25 +20,25 @@ export function formatSignedAt(signedAt: number): string {
  * server writes. The page should then say "Filled in when you sign" instead of a date.
  */
 export function signedDatePreview(
-	serverNow: number,
-	sessionMs: number,
+  serverNow: number,
+  sessionMs: number,
 ): { text: string; reliable: boolean } {
-	const untilMidnight = DAY_MS - (serverNow % DAY_MS);
-	return {
-		text: formatSignedAt(serverNow),
-		reliable: untilMidnight > sessionMs,
-	};
+  const untilMidnight = DAY_MS - (serverNow % DAY_MS);
+  return {
+    text: formatSignedAt(serverNow),
+    reliable: untilMidnight > sessionMs,
+  };
 }
 
 export function formatSignedTime(signedAt: number): string {
-	return new Date(signedAt).toISOString().replace(/\.\d{3}Z$/, "Z");
+  return new Date(signedAt).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 function ordinal(day: number): string {
-	const teen = day % 100;
-	if (teen >= 11 && teen <= 13) return `${day}th`;
-	if (day % 10 === 1) return `${day}st`;
-	if (day % 10 === 2) return `${day}nd`;
-	if (day % 10 === 3) return `${day}rd`;
-	return `${day}th`;
+  const teen = day % 100;
+  if (teen >= 11 && teen <= 13) return `${day}th`;
+  if (day % 10 === 1) return `${day}st`;
+  if (day % 10 === 2) return `${day}nd`;
+  if (day % 10 === 3) return `${day}rd`;
+  return `${day}th`;
 }
