@@ -17,6 +17,10 @@ import { commitOrReplay, guardedBatch } from '#/db/guarded-batch.ts';
 import { getDb } from '#/db/index.ts';
 import { auditEvents, documents, outbox, signers } from '#/db/schema/index.ts';
 import { insertAudit, planAudit } from '#/server/domain/audit.ts';
+import {
+  type InviteEmailState,
+  readDeliveryState,
+} from '#/server/domain/delivery.ts';
 import { publishBlocker } from '#/server/domain/publish-rules.ts';
 import { readLastOpId } from '#/server/domain/secrets.ts';
 import { AppError } from '#/server/errors.ts';
@@ -668,6 +672,8 @@ export type OwnedSigner = {
   clientIp: string | null;
   userAgent: string | null;
   declineReason: string | null;
+  /** The state of the mail that carries this person's signing link. Null when none applies. */
+  inviteEmail: InviteEmailState | null;
 };
 
 export type OwnedActivity = {
@@ -688,6 +694,8 @@ export type OwnedDocumentDetail = {
   expiresAt: number | null;
   pageCount: number;
   uploaded: boolean;
+  /** True while queued work for this document (mail, next invite, notices) is not finished. */
+  busy: boolean;
   signers: OwnedSigner[];
   activity: OwnedActivity[];
 };
@@ -782,6 +790,7 @@ export async function readOwnedDocument(
     .where(eq(auditEvents.documentId, documentId))
     .orderBy(asc(auditEvents.seq));
   const names = new Map(people.map((person) => [person.id, person.name]));
+  const delivery = await readDeliveryState(documentId);
   return {
     id: document.id,
     title: document.title,
@@ -790,7 +799,14 @@ export async function readOwnedDocument(
     expiresAt: document.expiresAt,
     pageCount: document.pageCount,
     uploaded: document.uploadStatus === 'uploaded',
-    signers: people,
+    busy: delivery.busy,
+    signers: people.map((person) => ({
+      ...person,
+      inviteEmail:
+        person.status === 'invited'
+          ? (delivery.inviteEmail.get(person.id) ?? null)
+          : null,
+    })),
     activity: events.map((event) => ({
       seq: event.seq,
       type: event.type,

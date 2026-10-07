@@ -359,7 +359,16 @@ function StatusCallout({
   if (status === 'in_progress') {
     tone = 'brand';
     icon = <Clock className="size-5" strokeWidth={1.75} />;
-    if (invited) {
+    if (invited?.inviteEmail === 'failed') {
+      tone = 'warning';
+      icon = <TriangleAlert className="size-5" strokeWidth={1.75} />;
+      heading = `We couldn’t email ${invited.name}`;
+      body = `The invite to ${invited.email} did not go through after several tries. Copy a new signing link and send it to ${invited.name} yourself. A new email is also attempted when you copy it.`;
+      note = `Copying a new link turns off the one ${invited.name} already has.`;
+    } else if (invited?.inviteEmail === 'sending') {
+      heading = `Sending the invite to ${invited.name}`;
+      body = `The email to ${invited.email} is on its way. This page updates by itself.`;
+    } else if (invited) {
       heading = `Waiting on ${invited.name}`;
       const when = [
         invited.invitedAt != null

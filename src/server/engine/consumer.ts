@@ -6,7 +6,7 @@ import { insertProbe } from '#/db/probes.ts';
 import { deadLetters } from '#/db/schema/index.ts';
 import { backoffSeconds, PermanentEventError } from '#/server/engine/errors.ts';
 import { envelopeSchema } from '#/server/engine/events.ts';
-import { processEvent } from '#/server/engine/handlers.ts';
+import { markEmailFailed, processEvent } from '#/server/engine/handlers.ts';
 
 const probeSchema = z.object({ note: z.string() });
 
@@ -87,6 +87,8 @@ export async function handleDeadLetterBatch(
   batch: MessageBatch<unknown>,
 ): Promise<void> {
   for (const message of batch.messages) {
+    const envelope = envelopeSchema.safeParse(message.body);
+    if (envelope.success) await markEmailFailed(envelope.data, Date.now());
     await recordDeadLetter({
       queue: 'ds-events',
       body: message.body,

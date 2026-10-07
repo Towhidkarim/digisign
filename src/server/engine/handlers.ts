@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, lt, ne, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 
 import { canonicalJson } from '#/core/canonical-json.ts';
@@ -85,6 +85,38 @@ async function loadOutbox(eventId: string) {
     .where(eq(outbox.id, eventId))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * A mail that used up its retries is recorded as failed, so the owner's page can say so and
+ * offer a new link. A mail that was already sent is left alone.
+ */
+export async function markEmailFailed(
+  envelope: QueueEnvelope,
+  now: number,
+): Promise<void> {
+  if (envelope.type !== 'send_email') return;
+  const row = await loadOutbox(envelope.eventId);
+  const payload = row
+    ? parsePayload(sendEmailPayloadSchema, row.payloadJson)
+    : null;
+  if (!payload?.to) return;
+  await getDb()
+    .insert(emailDeliveries)
+    .values({
+      id: ulid(),
+      eventId: envelope.eventId,
+      toAddr: payload.to,
+      template: payload.template,
+      status: 'failed',
+      attempts: 0,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [emailDeliveries.eventId, emailDeliveries.toAddr],
+      set: { status: 'failed', claimedUntil: null, updatedAt: now },
+      setWhere: ne(emailDeliveries.status, 'sent'),
+    });
 }
 
 // dispatch_next: the next signer becomes `invited` and gets a send_email row.

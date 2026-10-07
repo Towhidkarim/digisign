@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   Pencil,
   Send,
+  TriangleAlert,
 } from 'lucide-react';
 
 import { cn } from '#/lib/utils.ts';
@@ -84,6 +85,10 @@ export function StatusBadge({
 export type SignerStatus =
   | 'pending'
   | 'invited'
+  /** Invited, and the mail with the signing link is still on its way. */
+  | 'sending'
+  /** Invited, but the mail could not be delivered. */
+  | 'email-failed'
   | 'signed'
   | 'declined'
   | 'voided';
@@ -101,6 +106,16 @@ const SIGNER_STATUS: Record<
     label: 'Waiting',
     icon: Send,
     tone: 'bg-brand-bg text-brand-fg',
+  },
+  sending: {
+    label: 'Sending',
+    icon: Send,
+    tone: 'bg-neutral-bg text-neutral-fg',
+  },
+  'email-failed': {
+    label: 'Email failed',
+    icon: TriangleAlert,
+    tone: 'bg-warning-bg text-warning-fg',
   },
   signed: {
     label: 'Signed',

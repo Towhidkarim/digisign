@@ -23,6 +23,10 @@ function timeline(
     return [`Signed ${formatDayTime(signer.signedAt)}`];
   }
   if (signer.status === 'invited') {
+    if (signer.inviteEmail === 'sending') return ['Sending the invite…'];
+    if (signer.inviteEmail === 'failed') {
+      return ['The invite email could not be delivered'];
+    }
     return [
       signer.invitedAt != null
         ? `Invited ${formatRelative(signer.invitedAt)}`
@@ -40,6 +44,13 @@ function timeline(
     ];
   }
   return [];
+}
+
+/** An invited person shows how their mail is doing until it has been delivered. */
+function badgeStatus(signer: OwnedSigner): string {
+  if (signer.status !== 'invited') return signer.status;
+  if (signer.inviteEmail === 'sending') return 'sending';
+  return signer.inviteEmail === 'failed' ? 'email-failed' : 'invited';
 }
 
 export function SigningOrder({ signers }: { signers: readonly OwnedSigner[] }) {
@@ -95,7 +106,7 @@ export function SigningOrder({ signers }: { signers: readonly OwnedSigner[] }) {
                       </span>
                       {signer.name}
                     </p>
-                    <SignerStatusBadge status={signer.status} />
+                    <SignerStatusBadge status={badgeStatus(signer)} />
                   </div>
                   {signer.email ? (
                     <p className="text-small break-all text-muted-foreground">
