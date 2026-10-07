@@ -19,9 +19,30 @@ export function Logo({
     <>
       <span
         aria-hidden="true"
-        className="grid size-8 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground"
+        className="grid size-8 place-items-center rounded-md bg-primary text-primary-foreground"
       >
-        D
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 64 64"
+          className="size-8"
+          fill="none"
+        >
+          <path
+            d="M17 31.5 27.5 42 47 20"
+            stroke="currentColor"
+            strokeWidth="6.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M16 52h32"
+            stroke="currentColor"
+            strokeOpacity=".6"
+            strokeWidth="3.5"
+            strokeLinecap="round"
+          />
+        </svg>
       </span>
       DigiSign
     </>
