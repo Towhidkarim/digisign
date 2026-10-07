@@ -184,6 +184,9 @@
 @theme {
 	--text-display: 2.25rem;
 	--text-display--line-height: 2.75rem;
+	/* The landing headline only. */
+	--text-hero: 3.25rem;
+	--text-hero--line-height: 3.75rem;
 	--text-title: 1.625rem;
 	--text-title--line-height: 2.125rem;
 	--text-heading: 1.125rem;
@@ -204,12 +207,46 @@
 	}
 }
 
+/* Landing: the example signature draws itself once, the sheet rises into place. */
+.landing-sign {
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	animation: landing-draw 1.4s 0.5s ease-out forwards;
+}
+@keyframes landing-draw {
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+.landing-rise {
+	animation: landing-rise 0.6s ease-out both;
+}
+@keyframes landing-rise {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+}
+
 /* A PDF page is always white paper. Ink, fields and typed signatures drawn on it keep light-theme values in dark mode. */
 .on-paper {
 	color-scheme: light;
 	--card: #ffffff;
 	--foreground: #10303f;
 	--muted-foreground: #456072;
+	--muted: #edf3f7;
+	--border: #dbe6ee;
+	--primary: #1a7cb5;
+	--brand-bg: #e3f2fa;
+	--brand-fg: #0e5a85;
+	--success: #1d7a4b;
+	--success-bg: #e2f4ea;
+	--success-fg: #14603a;
+	--neutral-bg: #e8eff4;
+	--neutral-fg: #3b5365;
+	--signer-1: #c8561a;
+	--signer-2: #0b8a6a;
+	--signer-5: #6a4bc4;
 }
 
 html,

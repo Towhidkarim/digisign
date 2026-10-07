@@ -1,286 +1,225 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
+import {
+  ArrowRight,
+  FileSignature,
+  type LucideIcon,
+  MousePointerClick,
+  ShieldCheck,
+  UserRoundX,
+} from 'lucide-react';
 
-import { AppHeader } from '#/components/app-header.tsx';
+import { Logo } from '#/components/logo.tsx';
+import { ThemeToggle } from '#/components/theme-toggle.tsx';
 import { Button } from '#/components/ui/button.tsx';
+import { CheckCard } from '#/features/landing/check-card.tsx';
+import { HeroSheet } from '#/features/landing/hero-sheet.tsx';
+import { SigningOrder } from '#/features/landing/signing-order.tsx';
 
 export const Route = createFileRoute('/')({ component: Home });
 
+const WRAP = 'mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8';
+
+const PROMISES: { icon: LucideIcon; title: string; text: string }[] = [
+  {
+    icon: UserRoundX,
+    title: 'Signers need no account',
+    text: 'A link is all it takes. They open it, review the document and sign.',
+  },
+  {
+    icon: MousePointerClick,
+    title: 'Opening a link signs nothing',
+    text: 'People read first. Signing starts only when they choose to review and sign.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Checking needs no sign-in',
+    text: 'Anyone with the finished PDF can check it, without having been part of the signing.',
+  },
+];
+
 function Home() {
   return (
-    <div className="mx-auto w-[min(64rem,calc(100%-2.5rem))] pt-6 pb-10 text-foreground">
-      <AppHeader>
-        <nav
-          aria-label="Account"
-          className="flex items-center gap-5 text-[0.95rem] font-medium"
-        >
-          <Link
-            to="/verify"
-            className="hidden text-foreground no-underline hover:text-brand-hover sm:inline"
-          >
-            Check a PDF
-          </Link>
-          <Link
-            to="/login"
-            className="hidden text-foreground no-underline hover:text-brand-hover sm:inline"
-          >
-            Sign in
-          </Link>
-          <Button asChild size="sm">
+    <div className="min-h-svh bg-background text-foreground">
+      <header
+        className={`${WRAP} flex items-center justify-between gap-4 py-4`}
+      >
+        <Logo />
+        <nav aria-label="Account" className="flex items-center gap-1 sm:gap-2">
+          <Button asChild variant="ghost" className="hidden sm:inline-flex">
+            <Link to="/verify">Check a PDF</Link>
+          </Button>
+          <Button asChild variant="ghost">
+            <Link to="/login">Sign in</Link>
+          </Button>
+          <ThemeToggle />
+          <Button asChild className="hidden sm:inline-flex">
             <Link to="/signup">Create an account</Link>
           </Button>
         </nav>
-      </AppHeader>
+      </header>
 
       <main>
         <section
           aria-labelledby="landing-headline"
-          className="grid items-center gap-10 py-11 md:grid-cols-[1.3fr_1fr] md:gap-14 md:py-18"
+          className={`${WRAP} grid items-center gap-12 pt-8 pb-16 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:pt-14 lg:pb-24`}
         >
           <div>
+            <p className="inline-flex items-center gap-2 rounded-full bg-brand-bg px-3 py-1 text-xs font-medium text-brand-fg">
+              <FileSignature aria-hidden="true" className="size-3.5" />
+              One signer at a time. Checkable by anyone.
+            </p>
             <h1
               id="landing-headline"
-              className="max-w-[18ch] text-[clamp(2rem,4vw,3rem)] leading-[1.15] font-semibold tracking-tight"
+              className="mt-5 max-w-[16ch] text-display font-semibold tracking-tight text-balance md:text-hero"
             >
               Signed documents, kept in the file itself.
             </h1>
-            <p className="mt-5 max-w-[42ch] text-lg leading-relaxed text-muted-foreground">
-              You place the fields, people sign from a link, and the finished
-              PDF carries a record that anyone can check.
+            <p className="mt-5 max-w-[46ch] text-heading text-muted-foreground">
+              You place the fields and set the order. People sign from a link,
+              one after another. The finished PDF carries a record that anyone
+              can check.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Button asChild size="lg">
+              <Button asChild size="lg" className="max-sm:h-11">
+                <Link to="/signup">
+                  Create an account
+                  <ArrowRight aria-hidden="true" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="max-sm:h-11"
+              >
+                <Link to="/verify">Check a signed PDF</Link>
+              </Button>
+            </div>
+          </div>
+          <HeroSheet />
+        </section>
+
+        <section
+          aria-labelledby="landing-order"
+          className="border-y border-border bg-card"
+        >
+          <div className={`${WRAP} py-16 lg:py-20`}>
+            <h2
+              id="landing-order"
+              className="max-w-[24ch] text-title font-semibold tracking-tight text-balance"
+            >
+              The next person is invited only after the last one signs.
+            </h2>
+            <p className="mt-3 max-w-[56ch] text-muted-foreground">
+              Signing runs in the order you set. Nobody gets a link early,
+              nobody signs out of turn, and the record shows who signed when.
+            </p>
+            <div className="mt-10">
+              <SigningOrder />
+            </div>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="landing-check"
+          className={`${WRAP} grid items-center gap-10 py-16 lg:grid-cols-2 lg:gap-16 lg:py-24`}
+        >
+          <div>
+            <h2
+              id="landing-check"
+              className="max-w-[22ch] text-title font-semibold tracking-tight text-balance"
+            >
+              The proof travels with the PDF.
+            </h2>
+            <p className="mt-3 max-w-[50ch] text-muted-foreground">
+              When the last person signs, DigiSign adds a signed record to the
+              file. Drop the PDF on the public check page and it tells you
+              whether it is genuine and unchanged. No account, no phone call to
+              the sender.
+            </p>
+            <Button asChild variant="outline" className="mt-6">
+              <Link to="/verify">
+                Try the check page
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+          <CheckCard />
+        </section>
+
+        <section
+          aria-label="What to expect"
+          className="border-t border-border bg-card"
+        >
+          <ul className={`${WRAP} grid gap-8 py-14 md:grid-cols-3 md:gap-10`}>
+            {PROMISES.map((item) => {
+              const Icon = item.icon;
+              return (
+                <li key={item.title}>
+                  <span className="grid size-10 place-items-center rounded-md bg-brand-bg text-brand-fg">
+                    <Icon aria-hidden="true" className="size-5" />
+                  </span>
+                  <h3 className="mt-4 text-subheading font-semibold">
+                    {item.title}
+                  </h3>
+                  <p className="mt-1 max-w-[34ch] text-small text-muted-foreground">
+                    {item.text}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <section
+          aria-labelledby="landing-start"
+          className={`${WRAP} py-16 lg:py-24`}
+        >
+          <div className="rounded-xl bg-primary px-6 py-12 text-center text-primary-foreground sm:px-12">
+            <h2
+              id="landing-start"
+              className="mx-auto max-w-[22ch] text-title font-semibold tracking-tight text-balance"
+            >
+              Send your first document today.
+            </h2>
+            <p className="mx-auto mt-3 max-w-[44ch] opacity-90">
+              Upload a PDF, place the fields, name the signers and send. You can
+              watch each signature arrive.
+            </p>
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              <Button
+                asChild
+                size="lg"
+                variant="secondary"
+                className="max-sm:h-11"
+              >
                 <Link to="/signup">Create an account</Link>
               </Button>
-              <Button asChild size="lg" variant="outline">
+              <Button
+                asChild
+                size="lg"
+                variant="ghost"
+                className="text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground max-sm:h-11"
+              >
                 <Link to="/login">Sign in</Link>
               </Button>
             </div>
           </div>
-          <DocumentSheet />
-        </section>
-
-        <section
-          aria-labelledby="landing-how"
-          className="border-t border-border pt-8 pb-10"
-        >
-          <h2
-            id="landing-how"
-            className="mb-6 text-[1.35rem] font-semibold tracking-tight"
-          >
-            How a document gets signed
-          </h2>
-          <ol className="grid list-decimal gap-8 pl-5 md:grid-cols-3 md:gap-8">
-            <li className="pl-2">
-              <StepPrepare />
-              <strong className="mb-1 block">You prepare it.</strong>
-              <span className="block max-w-[32ch] leading-relaxed text-muted-foreground">
-                Place the fields on your PDF and name the people who sign, in
-                order.
-              </span>
-            </li>
-            <li className="pl-2">
-              <StepLink />
-              <strong className="mb-1 block">They sign from a link.</strong>
-              <span className="block max-w-[32ch] leading-relaxed text-muted-foreground">
-                Each person opens their link, reviews the document and signs. No
-                account.
-              </span>
-            </li>
-            <li className="pl-2">
-              <StepCheck />
-              <strong className="mb-1 block">Anyone can check it.</strong>
-              <span className="block max-w-[32ch] leading-relaxed text-muted-foreground">
-                The finished PDF carries its own record. Drop it on the public
-                page to check it.
-              </span>
-            </li>
-          </ol>
         </section>
       </main>
 
-      <footer className="flex items-baseline justify-between gap-4 border-t border-border pt-5 text-sm">
-        <span className="font-semibold">DigiSign</span>
-        <Link to="/verify">Check a signed PDF</Link>
+      <footer className="border-t border-border">
+        <div
+          className={`${WRAP} flex flex-wrap items-center justify-between gap-4 py-6 text-small`}
+        >
+          <Logo to={null} />
+          <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2">
+            <Link to="/verify">Check a signed PDF</Link>
+            <Link to="/login">Sign in</Link>
+            <Link to="/signup">Create an account</Link>
+          </nav>
+        </div>
       </footer>
     </div>
-  );
-}
-
-function StepFrame({ children }: { children: React.ReactNode }) {
-  return (
-    <svg
-      className="mb-3.5 -ml-1.5 block h-auto w-full max-w-44"
-      viewBox="0 0 160 96"
-      aria-hidden="true"
-    >
-      <title>Step illustration</title>
-      {children}
-    </svg>
-  );
-}
-
-function StepPrepare() {
-  return (
-    <StepFrame>
-      <rect
-        x="46"
-        y="10"
-        width="68"
-        height="76"
-        rx="4"
-        className="fill-card stroke-border"
-        strokeWidth="1.5"
-      />
-      <rect
-        x="56"
-        y="24"
-        width="40"
-        height="4"
-        rx="2"
-        className="fill-accent"
-      />
-      <rect
-        x="56"
-        y="34"
-        width="30"
-        height="4"
-        rx="2"
-        className="fill-accent"
-      />
-      <rect
-        x="56"
-        y="50"
-        width="48"
-        height="16"
-        rx="3"
-        className="fill-accent stroke-primary"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M92 42 l4 4 8-9"
-        className="fill-none stroke-brand-hover"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </StepFrame>
-  );
-}
-
-function StepLink() {
-  return (
-    <StepFrame>
-      <rect
-        x="18"
-        y="24"
-        width="84"
-        height="48"
-        rx="6"
-        className="fill-card stroke-border"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M30 40 h46 M30 50 h34 M30 60 h24"
-        className="fill-none stroke-ink-subtle"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <circle
-        cx="122"
-        cy="48"
-        r="18"
-        className="fill-accent stroke-primary"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M114 48 h16 M126 44 l6 4 -6 4"
-        className="fill-none stroke-brand-hover"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </StepFrame>
-  );
-}
-
-function StepCheck() {
-  return (
-    <StepFrame>
-      <rect
-        x="34"
-        y="14"
-        width="60"
-        height="72"
-        rx="4"
-        className="fill-card stroke-border"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M46 34 h36 M46 44 h26"
-        className="fill-none stroke-ink-subtle"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <circle
-        cx="108"
-        cy="62"
-        r="22"
-        className="fill-card stroke-primary"
-        strokeWidth="2"
-      />
-      <path
-        d="M99 62 l6 6 13-14"
-        className="fill-none stroke-brand-hover"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </StepFrame>
-  );
-}
-
-function DocumentSheet() {
-  return (
-    <figure
-      aria-label="A document with two signatures"
-      className="m-0 rounded-lg border border-border bg-card px-6 pt-6 pb-5 shadow-lg"
-    >
-      <figcaption className="flex justify-between border-b border-border pb-3 text-sm font-semibold">
-        <span>Service agreement</span>
-        <span className="font-normal text-muted-foreground">Page 1 of 4</span>
-      </figcaption>
-      <div aria-hidden="true" className="grid gap-2 py-4">
-        <span className="block h-2 w-[92%] rounded-full bg-accent" />
-        <span className="block h-2 w-[74%] rounded-full bg-accent" />
-        <span className="block h-2 w-[92%] rounded-full bg-accent" />
-        <span className="block h-2 w-[74%] rounded-full bg-accent" />
-      </div>
-      <div className="mt-1 grid grid-cols-2 gap-3">
-        <div className="rounded-lg border border-dashed border-ink-subtle px-3 pt-2.5 pb-3">
-          <p className="m-0 text-xs text-muted-foreground">Jordan Hale</p>
-          <svg
-            viewBox="0 0 240 50"
-            aria-hidden="true"
-            className="block h-10 w-full"
-          >
-            <title>A drawn signature</title>
-            <path
-              className="fill-none stroke-primary"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M10 32 C 22 12, 28 8, 38 18 C 45 27, 48 42, 56 32 C 64 20, 68 10, 77 24 C 84 34, 91 38, 102 26 C 114 14, 128 16, 136 28 C 142 36, 158 32, 175 24 C 188 18, 204 20, 218 16"
-            />
-          </svg>
-          <small className="block text-[0.72rem] text-brand-fg">Signed</small>
-        </div>
-        <div className="rounded-lg border border-dashed border-ink-subtle px-3 pt-2.5 pb-3">
-          <p className="m-0 text-xs text-muted-foreground">Amira Solano</p>
-          <em className="mt-4 block text-[0.72rem] font-normal text-muted-foreground not-italic">
-            Waiting
-          </em>
-        </div>
-      </div>
-    </figure>
   );
 }
