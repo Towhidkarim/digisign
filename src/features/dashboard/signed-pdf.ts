@@ -40,6 +40,7 @@ export async function downloadSignedPdf(
     const signed = await render(original, toLocalManifest(record), {
       fonts: await loadScriptFonts(),
       verifyOrigin: window.location.origin,
+      envelope: record.envelope,
     });
     const url = URL.createObjectURL(
       new Blob([signed.slice()], { type: 'application/pdf' }),

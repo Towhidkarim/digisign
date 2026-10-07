@@ -1,12 +1,15 @@
 import { PDFDocument } from 'pdf-lib';
 import { expect, it } from 'vitest';
-import { envelopeJson } from '#/features/sign/manifest.ts';
 import { readEmbeddedClues } from '#/features/verify/embedded.ts';
 
 it('reads pdf-lib attachments back', async () => {
   const pdf = await PDFDocument.create();
   pdf.addPage([200, 200]);
-  const text = envelopeJson({ documentId: 'ABCDEFGHIJK' } as never);
+  const text = JSON.stringify({
+    keyId: 'k1',
+    manifest: { documentId: 'ABCDEFGHIJK' },
+    sig: '',
+  });
   await pdf.attach(new TextEncoder().encode(text), 'digisign-manifest.json', {
     mimeType: 'application/json',
   });

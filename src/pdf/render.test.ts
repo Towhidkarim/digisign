@@ -65,7 +65,11 @@ describe('signed pdf render', () => {
       ],
       completedAt: 1_700_000_000_000,
     };
-    const options = { fonts, verifyOrigin: 'https://digisign.test' };
+    const options = {
+      fonts,
+      verifyOrigin: 'https://digisign.test',
+      envelope: '{"keyId":"k1","manifest":{},"sig":""}',
+    };
     const first = await render(original, manifest, options);
     const second = await render(original, manifest, options);
     expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
@@ -158,7 +162,11 @@ describe('signed pdf render', () => {
       ],
       completedAt: 1_700_000_000_000,
     };
-    const options = { fonts: loaded, verifyOrigin: 'https://digisign.test' };
+    const options = {
+      fonts: loaded,
+      verifyOrigin: 'https://digisign.test',
+      envelope: '{"keyId":"k1","manifest":{},"sig":""}',
+    };
     const first = await render(original, manifest, options);
     const second = await render(original, manifest, options);
     expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);

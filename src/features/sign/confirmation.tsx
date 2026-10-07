@@ -9,13 +9,15 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { Button } from '#/components/ui/button.tsx';
-import { buildManifest } from '#/features/sign/manifest.ts';
+import { sha256Hex } from '#/core/hash.ts';
 import type { SignerRecord } from '#/features/sign/session.ts';
 import { SignerPage } from '#/features/sign/signer-status.tsx';
+import { recordIsGenuine, toLocalManifest } from '#/features/verify/outcome.ts';
 import { cn } from '#/lib/utils.ts';
 import { loadScriptFonts } from '#/pdf/fonts.ts';
 import { render } from '#/pdf/render.ts';
 import type { SigningView } from '#/server/domain/signing.ts';
+import { verifyManifestFn } from '#/server/verify.ts';
 
 const WHEN = new Intl.DateTimeFormat(undefined, {
   day: 'numeric',
@@ -381,16 +383,24 @@ function useSignedPdf(
     const { view, bytes } = source.source;
     let cancelled = false;
     void (async () => {
-      const manifest = await buildManifest({
-        fileName: view.fileName,
-        upload: view.upload,
-        layout: view.layout,
-        signers: [],
-        records: view.records,
+      // The PDF embeds the server's signed record, so draw it from that record, not from this tab.
+      const record = await verifyManifestFn({
+        data: { documentId: view.documentId },
       });
-      const signed = await render(bytes, manifest, {
+      if (!recordIsGenuine(record)) {
+        throw new Error(
+          'The signed record could not be confirmed yet. Try again in a moment.',
+        );
+      }
+      if ((await sha256Hex(bytes)) !== record.manifest.source.sha256) {
+        throw new Error(
+          'The prepared PDF does not match the signed record, so no signed PDF was made.',
+        );
+      }
+      const signed = await render(bytes, toLocalManifest(record), {
         fonts: await loadScriptFonts(),
         verifyOrigin: window.location.origin,
+        envelope: record.envelope,
       });
       if (!cancelled) setState({ phase: 'ready', bytes: signed });
     })().catch((caught: unknown) => {

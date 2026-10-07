@@ -137,8 +137,8 @@ export function toLocalManifest(record: FoundRecord): LocalManifest {
   };
 }
 
-const FOOTER =
-  /DigiSign · ([0-9A-Za-z]{10,40}) · [0-9a-f]{12} · (\S+?)\/v\/[0-9A-Za-z]+/;
+/** The page footer: the verify address carries the document id. */
+const FOOTER = /Signed with DigiSign · (\S+?)\/v\/([0-9A-Za-z]{10,40})/;
 
 /** Reads the document id and verify origin from a page footer. */
 export function parseFooter(
@@ -146,5 +146,5 @@ export function parseFooter(
 ): { documentId: string; origin: string } | null {
   const match = FOOTER.exec(text);
   if (!match?.[1] || !match[2]) return null;
-  return { documentId: match[1], origin: match[2] };
+  return { documentId: match[2], origin: match[1] };
 }

@@ -14,6 +14,7 @@ import {
 import { sha256Hex } from '#/core/hash.ts';
 import type { InviteReason } from '#/core/invite-reason.ts';
 import { limits } from '#/core/limits.ts';
+import { currentRenderer } from '#/core/renderer.ts';
 import { ulid } from '#/core/ulid.ts';
 import { commitOrReplay, guardedBatch } from '#/db/guarded-batch.ts';
 import { getDb } from '#/db/index.ts';
@@ -926,7 +927,7 @@ async function buildCompletedManifest(input: {
     signers: manifestSigners,
     completedAt: input.current.signedAt,
     audit: { headSeq: input.head.seq, headHash: input.head.hash },
-    renderer: { name: 'digisign-render', version: '1.0.0' },
+    renderer: currentRenderer(),
   };
   const signed = await signManifest(manifest);
   return { json: signed.envelopeJson, sha256: signed.sha256 };

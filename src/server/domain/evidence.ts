@@ -6,6 +6,7 @@ import type {
   SaveLayoutInput,
 } from '#/core/contracts/index.ts';
 import { sha256Hex } from '#/core/hash.ts';
+import type { RendererStamp } from '#/core/renderer.ts';
 import type { ManifestSigner } from '#/features/sign/manifest.ts';
 import { signCanonical } from '#/server/manifest-key.ts';
 
@@ -45,7 +46,7 @@ export type ServerManifest = {
   signers: ManifestSigner[];
   completedAt: number;
   audit: { headSeq: number; headHash: string };
-  renderer: { name: 'digisign-render'; version: '1.0.0' };
+  renderer: RendererStamp;
 };
 
 export async function sealEvidence(input: {

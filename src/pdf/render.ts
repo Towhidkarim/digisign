@@ -11,21 +11,13 @@ import {
   rgb,
   StandardFonts,
 } from 'pdf-lib';
-import { create as createQr } from 'qrcode';
 
 import type { FieldInput, FieldValue } from '#/core/contracts/index.ts';
-import {
-  clampMicro,
-  type PageGeometry,
-  ptToMicro,
-  viewMicroToPdf,
-  viewSize,
-} from '#/core/coords.ts';
+import { type PageGeometry, viewMicroToPdf, viewSize } from '#/core/coords.ts';
 import { type ScriptFont, unpackStrokes } from '#/features/sign/capture.ts';
 import { fontSizeForBox } from '#/features/sign/fitted-script.tsx';
 import type { LocalManifest } from '#/features/sign/manifest.ts';
-import { envelopeJson } from '#/features/sign/manifest.ts';
-import { formatSignedTime } from '#/features/sign/values.ts';
+import { drawBrandedCertificate, drawBrandedFooters } from '#/pdf/branded.ts';
 import type { ScriptFontBytes } from '#/pdf/fonts.ts';
 import {
   checkFractions,
@@ -33,14 +25,18 @@ import {
   inkFractions,
   inkStrokeWidth,
 } from '#/pdf/ink.ts';
+import { safeText } from '#/pdf/text.ts';
 
 const INK = rgb(18 / 255, 52 / 255, 74 / 255);
-const QUIET = rgb(70 / 255, 110 / 255, 130 / 255);
 
+/**
+ * Draws the signed PDF. Same inputs, same bytes: verification compares them.
+ * `envelope` is the server's signed manifest exactly as stored. It is embedded untouched.
+ */
 export async function render(
   originalBytes: Uint8Array,
   manifest: LocalManifest,
-  options: { fonts: ScriptFontBytes; verifyOrigin: string },
+  options: { fonts: ScriptFontBytes; verifyOrigin: string; envelope: string },
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.load(originalBytes, { updateMetadata: false });
   const body = await pdf.embedFont(StandardFonts.Helvetica);
@@ -56,14 +52,8 @@ export async function render(
     drawField(page, geometry, field, value, body, script, options.fonts);
   }
 
-  for (let index = 0; index < pages.length; index += 1) {
-    const page = pages[index];
-    const geometry = manifest.geometry[index];
-    if (!page || !geometry) continue;
-    drawFooter(page, geometry, manifest, verifyUrl, body);
-  }
-
-  drawCertificate(pdf, manifest, verifyUrl, body);
+  await drawBrandedFooters(pdf, manifest, verifyUrl);
+  await drawBrandedCertificate(pdf, manifest, verifyUrl);
   const completed = new Date(manifest.completedAt);
   pdf.setTitle(manifest.title);
   pdf.setAuthor('DigiSign');
@@ -78,7 +68,7 @@ export async function render(
   );
   const id = PDFHexString.of(manifest.source.sha256);
   pdf.context.trailerInfo.ID = pdf.context.obj([id, id]);
-  const payload = new TextEncoder().encode(envelopeJson(manifest));
+  const payload = new TextEncoder().encode(options.envelope);
   await pdf.attach(payload, 'digisign-manifest.json', {
     mimeType: 'application/json',
     description: 'DigiSign manifest',
@@ -250,8 +240,9 @@ function drawFittedText(
     bottomLeft.x - topLeft.x,
     bottomLeft.y - topLeft.y,
   );
-  const size = fitSize(font, text, span * 0.9, fieldHeight * 0.8, maxSize);
-  const textWidth = font.widthOfTextAtSize(text, size);
+  const drawn = safeText(font, text);
+  const size = fitSize(font, drawn, span * 0.9, fieldHeight * 0.8, maxSize);
+  const textWidth = font.widthOfTextAtSize(drawn, size);
   const ascent = font.heightAtSize(size, { descender: false });
   const descent = font.heightAtSize(size) - ascent;
   const centerAbove = (ascent - descent) / 2;
@@ -261,7 +252,7 @@ function drawFittedText(
   const vy = (bottomLeft.y - topLeft.y) / (fieldHeight || 1);
   const cx = (topLeft.x + topRight.x) / 2 + (bottomLeft.x - topLeft.x) / 2;
   const cy = (topLeft.y + topRight.y) / 2 + (bottomLeft.y - topLeft.y) / 2;
-  page.drawText(text, {
+  page.drawText(drawn, {
     x: cx - ux * (textWidth / 2) + vx * centerAbove,
     y: cy - uy * (textWidth / 2) + vy * centerAbove,
     size,
@@ -269,88 +260,6 @@ function drawFittedText(
     color: INK,
     rotate: degrees((Math.atan2(uy, ux) * 180) / Math.PI),
   });
-}
-
-function drawFooter(
-  page: PDFPage,
-  geometry: PageGeometry,
-  manifest: LocalManifest,
-  verifyUrl: string,
-  font: PDFFont,
-): void {
-  const { viewW, viewH } = viewSize(geometry);
-  const yMicro = clampMicro(Math.round(((viewH - 16) / viewH) * 1_000_000));
-  const left = viewMicroToPdf(geometry, ptToMicro(8, viewW), yMicro);
-  const right = viewMicroToPdf(
-    geometry,
-    clampMicro(1_000_000 - ptToMicro(8, viewW)),
-    yMicro,
-  );
-  const span = Math.hypot(right.x - left.x, right.y - left.y);
-  const text = `DigiSign · ${manifest.documentId} · ${manifest.source.sha256.slice(0, 12)} · ${verifyUrl}`;
-  let size = 8;
-  while (size > 5 && font.widthOfTextAtSize(text, size) > span) size -= 0.5;
-  page.drawText(text, {
-    x: left.x,
-    y: left.y,
-    size,
-    font,
-    color: QUIET,
-    rotate: degrees(
-      (Math.atan2(right.y - left.y, right.x - left.x) * 180) / Math.PI,
-    ),
-  });
-}
-
-function drawCertificate(
-  pdf: PDFDocument,
-  manifest: LocalManifest,
-  verifyUrl: string,
-  font: PDFFont,
-): void {
-  let page = pdf.addPage([612, 792]);
-  let y = 740;
-  const write = (text: string, size: number, gap: number) => {
-    if (y < 150) {
-      page = pdf.addPage([612, 792]);
-      y = 740;
-    }
-    page.drawText(text, { x: 48, y, size, font, color: INK });
-    y -= gap;
-  };
-  write('Certificate of Completion', 18, 28);
-  write(`Document ${manifest.documentId}`, 11, 18);
-  write(`Title ${manifest.title}`, 11, 18);
-  write(`Original SHA-256 ${manifest.source.sha256}`, 9, 16);
-  write(`Geometry SHA-256 ${manifest.geometrySha256}`, 9, 16);
-  write(`Layout SHA-256 ${manifest.layoutSha256}`, 9, 22);
-  for (const signer of manifest.signers) {
-    write(
-      `${signer.order}. ${signer.name} · ${formatSignedTime(signer.signedAt)}`,
-      11,
-      16,
-    );
-  }
-  write(`Verify at ${verifyUrl}`, 11, 18);
-  const qr = createQr(verifyUrl, {
-    errorCorrectionLevel: 'M',
-    maskPattern: 0,
-  });
-  const cell = 96 / qr.modules.size;
-  const originX = 48;
-  const originY = Math.max(48, y - 96);
-  for (let row = 0; row < qr.modules.size; row += 1) {
-    for (let col = 0; col < qr.modules.size; col += 1) {
-      if (!qr.modules.data[row * qr.modules.size + col]) continue;
-      page.drawRectangle({
-        x: originX + col * cell,
-        y: originY + (qr.modules.size - 1 - row) * cell,
-        width: cell,
-        height: cell,
-        color: INK,
-      });
-    }
-  }
 }
 
 function valueFor(

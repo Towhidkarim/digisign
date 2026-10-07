@@ -460,6 +460,7 @@ async function renderedHash(
     const rendered = await render(original, toLocalManifest(record), {
       fonts: await loadScriptFonts(),
       verifyOrigin: origin ?? window.location.origin,
+      envelope: record.envelope,
     });
     return { kind: 'ok', sha256: await sha256Hex(rendered) };
   } catch {

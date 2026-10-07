@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DigiSign architecture guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f8fa;--surface:#fff;--subtle:#edf3f7;--border:#dbe6ee;--ink:#10303f;--muted:#456072;--faint:#5a7184;
+  --brand:#1a7cb5;--brand-bg:#e3f2fa;--brand-fg:#0e5a85;--ok:#1d7a4b;--ok-bg:#e2f4ea;--ok-fg:#14603a;
+  --warn:#a35f00;--warn-bg:#fcf0d9;--warn-fg:#7a4700;--bad:#b3332c;--bad-bg:#fbe9e7;--bad-fg:#8f2620;--code-bg:#0e2230;--code-ink:#d8ecf8;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#08202f;--surface:#0e2c3e;--subtle:#143a50;--border:#1e4a66;--ink:#e9f5fc;--muted:#b4cfe0;--faint:#8fb0c6;
+  --brand:#6ab8e6;--brand-bg:#12425d;--brand-fg:#a9dcf6;--ok:#5fcf94;--ok-bg:#12402b;--ok-fg:#9be5bd;
+  --warn:#f0b13d;--warn-bg:#4a3410;--warn-fg:#f7cf86;--bad:#f08b83;--bad-bg:#4d1f1c;--bad-fg:#f7b8b2;--code-bg:#061620;
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.7 Poppins,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--brand)}
+.layout{display:grid;grid-template-columns:260px minmax(0,1fr);max-width:1240px;margin:0 auto}
+nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow:auto;padding:28px 20px;border-right:1px solid var(--border)}
+nav.toc .logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;margin-bottom:20px}
+nav.toc .logo i{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--brand);color:var(--bg);font-style:normal;font-size:14px}
+nav.toc a{display:block;padding:5px 10px;border-radius:8px;text-decoration:none;color:var(--muted);font-size:13px;line-height:20px}
+nav.toc a:hover{background:var(--subtle);color:var(--ink)}
+nav.toc .grp{margin:16px 10px 4px;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+main{padding:40px 32px 96px;min-width:0}
+h1{font-size:30px;line-height:38px;margin:0 0 8px;letter-spacing:-.015em}
+h2{font-size:22px;line-height:30px;margin:56px 0 12px;padding-top:24px;border-top:1px solid var(--border);letter-spacing:-.01em}
+h3{font-size:16px;line-height:24px;margin:28px 0 6px}
+p{margin:0 0 12px;max-width:78ch}
+.lede{font-size:17px;color:var(--muted);max-width:70ch}
+code,pre{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace;font-size:12.5px}
+code{background:var(--subtle);padding:1px 6px;border-radius:6px;word-break:break-word}
+pre{background:var(--code-bg);color:var(--code-ink);padding:14px 16px;border-radius:12px;overflow:auto;line-height:1.55;margin:10px 0 16px}
+pre code{background:none;padding:0;color:inherit}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin:12px 0}
+.note,.warn,.good{border-radius:12px;padding:12px 16px;margin:14px 0;font-size:14px;max-width:80ch}
+.note{background:var(--brand-bg);color:var(--brand-fg)}
+.warn{background:var(--warn-bg);color:var(--warn-fg)}
+.good{background:var(--ok-bg);color:var(--ok-fg)}
+.bad{background:var(--bad-bg);color:var(--bad-fg);border-radius:12px;padding:12px 16px;margin:14px 0;font-size:14px;max-width:80ch}
+table{border-collapse:collapse;width:100%;margin:10px 0 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13.5px;display:block;overflow-x:auto}
+th,td{text-align:left;padding:9px 14px;border-bottom:1px solid var(--border);vertical-align:top;line-height:1.5}
+th{background:var(--subtle);font-weight:600;font-size:12.5px;color:var(--muted);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+dl{margin:0}
+dt{font-weight:600;margin-top:14px}
+dd{margin:2px 0 0;color:var(--muted);max-width:76ch}
+.steps{list-style:none;margin:16px 0;padding:0;counter-reset:s}
+.steps>li{position:relative;padding:0 0 22px 52px;counter-increment:s}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;background:var(--brand-bg);color:var(--brand-fg);display:grid;place-items:center;font-weight:600;font-size:14px}
+.steps>li::after{content:"";position:absolute;left:16px;top:38px;bottom:4px;width:2px;background:var(--border)}
+.steps>li:last-child::after{display:none}
+.steps h4{margin:0 0 4px;font-size:15.5px;line-height:24px}
+.who{display:inline-block;font-size:12px;font-weight:600;padding:1px 9px;border-radius:99px;margin-right:6px;vertical-align:1px}
+.who.b{background:var(--brand-bg);color:var(--brand-fg)}.who.s{background:var(--ok-bg);color:var(--ok-fg)}.who.q{background:var(--warn-bg);color:var(--warn-fg)}.who.o{background:var(--subtle);color:var(--muted)}
+.writes{font-size:13px;color:var(--muted);margin:6px 0 0}
+.writes b{color:var(--ink)}
+.diagram{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));margin:16px 0}
+.node{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.5}
+.node b{display:block;font-size:14px;margin-bottom:2px}
+.node.brand{border-color:var(--brand);background:var(--brand-bg);color:var(--brand-fg)}
+.cols{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.tag{font-size:12px;font-weight:600;padding:1px 8px;border-radius:99px;background:var(--subtle);color:var(--muted)}
+.hash{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--faint)}
+@media(max-width:900px){.layout{grid-template-columns:1fr}nav.toc{position:static;height:auto;border-right:0;border-bottom:1px solid var(--border)}main{padding:24px 16px 64px}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <div class="logo"><i>D</i> DigiSign</div>
+  <div class="grp">Start here</div>
+  <a href="#what">What it is</a>
+  <a href="#glossary">Glossary</a>
+  <a href="#big-picture">The big picture</a>
+  <a href="#storage">Where data lives</a>
+  <div class="grp">The journey</div>
+  <a href="#j-account">1. Account</a>
+  <a href="#j-draft">2. Upload and draft</a>
+  <a href="#j-prepare">3. Prepare</a>
+  <a href="#j-publish">4. Publish</a>
+  <a href="#j-invite">5. Queue and invite email</a>
+  <a href="#j-open">6. Signer opens the link</a>
+  <a href="#j-sign">7. Signer signs</a>
+  <a href="#j-complete">8. Completion</a>
+  <a href="#j-pdf">9. The signed PDF</a>
+  <a href="#j-verify">10. Checking a PDF</a>
+  <a href="#j-other">11. Decline, void, expire</a>
+  <div class="grp">Deep dives</div>
+  <a href="#evidence">Evidence</a>
+  <a href="#manifest">Manifest</a>
+  <a href="#audit">Audit chain</a>
+  <a href="#keys">Signing key</a>
+  <a href="#reliability">Reliability patterns</a>
+  <a href="#security">Security and privacy</a>
+  <div class="grp">Reference</div>
+  <a href="#decisions">Decisions and why</a>
+  <a href="#states">Status rules</a>
+  <a href="#limits">Limits</a>
+  <a href="#config">Config and deploy</a>
+  <a href="#codemap">Code map</a>
+  <a href="#gaps">Known gaps</a>
+</nav>
+
+<main>
+<h1>DigiSign architecture guide</h1>
+<p class="lede">How a PDF becomes a signed, checkable document: every step, which function runs, and what gets written where. Written from the code as it stands, not from the plans.</p>
+
+<div class="card">
+  <b>How to read this.</b> Section 1 to 4 give you the vocabulary and the map. “The journey” walks one document from upload to verification, in order. “Deep dives” explain the three things that make the product trustworthy: the evidence, the manifest and the audit chain. Anything marked <span class="tag">code</span> points at a real file you can open.
+</div>
+
+<h2 id="what">1. What DigiSign is</h2>
+<p>A creator uploads a PDF, places fields (signature, date, text…) and names the people who must sign, <b>in order</b>. Each signer gets a link by email, opens it without an account, and signs. When the last person signs, the finished PDF carries a record that <b>anyone can check</b> on a public page.</p>
+<p>Two promises are binding (<code>PRODUCT.md</code>):</p>
+<ul>
+  <li><b>Strict order.</b> The next person is invited only after the previous one has signed. At most one signer per document is “invited” at a time.</li>
+  <li><b>Checkable file.</b> The finished PDF contains its own record. A stranger can drop it on <code>/verify</code> and learn whether it is genuine and unchanged.</li>
+</ul>
+<div class="note"><b>The one-sentence architecture:</b> the browser reads, draws and stamps PDFs; the server is the <i>evidence authority</i> that stores facts, signs the final record and keeps a tamper-evident log. The server never parses or renders PDFs (the Cloudflare Worker is small and free-tier; PDF libraries only load in the browser).</div>
+
+<h2 id="glossary">2. Glossary</h2>
+<p>These words appear everywhere. Read once, refer back.</p>
+<dl>
+  <dt>Document</dt><dd>One PDF being signed, plus its signers, fields and history. Row in <code>documents</code>. Statuses: draft, in_progress, completed, declined, voided, expired.</dd>
+  <dt>Signer</dt><dd>A named person on a document, with an email and a position in the order. Row in <code>signers</code>. They never have an account.</dd>
+  <dt>Field / layout</dt><dd>A box on a page that a signer fills: signature, initials, date signed, full name, text, checkbox. The <b>layout</b> is the full list of fields, saved as one JSON blob with a version number. Positions are in <b>micro units</b>: integers from 0 to 1,000,000 across the page (so they do not depend on screen size).</dd>
+  <dt>Geometry</dt><dd>Page sizes and rotation of the original PDF (<code>mediaBox</code>, <code>cropBox</code>, <code>rotate</code>), recorded at upload so fields can be placed and the PDF re-drawn identically later.</dd>
+  <dt>SHA-256 (a “hash”)</dt><dd>A fingerprint of some bytes: 64 hex characters. Change one byte and the fingerprint changes completely. Used to prove “this is exactly that”.</dd>
+  <dt>Canonical JSON</dt><dd>JSON written one single way (keys sorted, no spaces) so the same data always gives the same bytes, and therefore the same hash. <span class="tag">code</span> <code>src/core/canonical-json.ts</code></dd>
+  <dt>Evidence</dt><dd>One signer’s private proof of signing: what they entered, when, their email, IP address, browser string, and when they consented. Stored as a JSON file in R2 and referenced by its hash. <b>Private</b>: never shown publicly. See <a href="#evidence">Evidence</a>.</dd>
+  <dt>Manifest</dt><dd>The public, signed summary of a completed document: source file hash, layout, every signer’s values, and the head of the audit chain. The server signs it with its private key and stores it in D1. The exact same signed bytes are embedded in the final PDF. See <a href="#manifest">Manifest</a>.</dd>
+  <dt>Audit chain</dt><dd>An append-only log per document where each entry contains the hash of the previous one, so editing or deleting any entry breaks every entry after it. Table <code>audit_events</code>. See <a href="#audit">Audit chain</a>.</dd>
+  <dt>Ed25519</dt><dd>The digital-signature algorithm used to sign manifests. The server holds the private key (secret <code>MANIFEST_SIGNING_KEY</code>); the public key is published at <code>/.well-known/digisign-keys.json</code>, so anyone can verify.</dd>
+  <dt>Magic link</dt><dd>The signing URL <code>/s/&lt;token&gt;</code> emailed to a signer. The token is 32 random bytes; only its SHA-256 is stored, so a database leak cannot be used to sign.</dd>
+  <dt>Session</dt><dd>What the signer gets when they click “Review and sign”: a cookie <code>digisign_signer</code> (2 hours absolute, 30 minutes idle). Opening the link alone does not create one.</dd>
+  <dt>State hash</dt><dd>A fingerprint of everything a signer is agreeing to (source PDF + geometry + layout + the evidence of earlier signers). The browser sends it back when signing; if the document changed meanwhile, signing is refused.</dd>
+  <dt>D1</dt><dd>Cloudflare’s SQLite database. Holds all rows and the audit chain.</dd>
+  <dt>R2</dt><dd>Cloudflare’s object storage (like S3). Holds <b>blobs</b>: the original PDFs, evidence files, and anchored copies. “Blob” just means “a file of bytes stored under a key”.</dd>
+  <dt>Queue</dt><dd>Cloudflare Queues (<code>ds-events</code>): a to-do list for background work such as “send this email”. <code>ds-dlq</code> is the dead-letter queue for work that kept failing.</dd>
+  <dt>Outbox</dt><dd>A table of events written <b>in the same database transaction</b> as the change that caused them. A publisher then moves them to the Queue. This guarantees “the change happened” and “the follow-up work is queued” can never disagree.</dd>
+  <dt>Inbox</dt><dd>A table of events already handled, so a repeated delivery is ignored.</dd>
+  <dt>Idempotency key</dt><dd>A unique id the browser attaches to a request, so retrying the same request (flaky network) does not do the work twice. Table <code>idempotency_keys</code>.</dd>
+  <dt>CAS (compare-and-set)</dt><dd>“Update this row only if its <code>version</code> is still what I read.” Prevents two people overwriting each other. See <a href="#reliability">Reliability</a>.</dd>
+  <dt>Anchor</dt><dd>After completion, a copy of the manifest and a <i>signed checkpoint</i> of the audit head are written to R2 under keys that are never overwritten. See the honest note in <a href="#gaps">Known gaps</a>.</dd>
+  <dt>Sweeper</dt><dd>A cron job (every minute) that repairs lost work, expires old documents, sends one reminder, and cleans up.</dd>
+</dl>
+
+<h2 id="big-picture">3. The big picture</h2>
+<div class="diagram">
+  <div class="node"><b>Browser</b>Creator desk and signing desk (React). Reads PDFs with pdf.js, stamps final PDFs with pdf-lib, hashes files, draws signatures.</div>
+  <div class="node brand"><b>Worker (one deployment)</b>TanStack Start app: pages, server functions, file route <code>/files/documents/:id/source</code>, queue consumer, cron sweeper. Entry: <code>src/server-entry.ts</code>.</div>
+  <div class="node"><b>D1 (SQLite)</b>Rows: documents, signers, tokens, sessions, audit chain, outbox, inbox, deliveries.</div>
+  <div class="node"><b>R2</b>Blobs: original PDFs, signer evidence, anchored manifests and checkpoints.</div>
+  <div class="node"><b>Queues</b><code>ds-events</code> carries ids only (&lt; 1 KB). <code>ds-dlq</code> keeps failures.</div>
+  <div class="node"><b>Mail</b>Gmail SMTP or Resend sends the designed email; the console prints it in dev.</div>
+</div>
+<p>The Worker is <i>one</i> program with three doors: <code>fetch</code> (web requests), <code>queue</code> (background events), <code>scheduled</code> (cron). All three live in <code>src/server-entry.ts</code>.</p>
+
+<h3>Why the code is split the way it is</h3>
+<table>
+<tr><th>Layer</th><th>Folder</th><th>Job</th></tr>
+<tr><td>Pure rules</td><td><code>src/core</code></td><td>Limits, canonical JSON, hashing, status transitions, field geometry, signature stroke encoding. No database, no network.</td></tr>
+<tr><td>Database shape</td><td><code>src/db</code></td><td>Drizzle schema, <code>guardedBatch</code> (safe multi-statement writes), migrations in <code>/migrations</code>.</td></tr>
+<tr><td>Business logic</td><td><code>src/server/domain</code></td><td>The real work: create draft, publish, invite, submit signature, verify, expire. This is where to read first.</td></tr>
+<tr><td>Entry points</td><td><code>src/server/documents.ts</code>, <code>signing.ts</code>, <code>verify.ts</code></td><td>Thin <code>createServerFn</code> wrappers: check who is calling, validate input with zod, call the domain function, turn errors into messages.</td></tr>
+<tr><td>Background</td><td><code>src/server/engine</code></td><td>Outbox publisher, queue consumer, event handlers, cron sweeper.</td></tr>
+<tr><td>Browser features</td><td><code>src/features</code>, <code>src/pdf</code></td><td>Editor, signing desk, verify desk, PDF rendering.</td></tr>
+</table>
+
+<h2 id="storage">4. Where data lives</h2>
+<h3>D1 tables</h3>
+<table>
+<tr><th>Table</th><th>Holds</th><th>Written when</th></tr>
+<tr><td><code>documents</code></td><td>Title, status, source hash/size/key, page count, geometry JSON, layout JSON + version, <b>manifest JSON</b> + hash, anchored time, expiry, <code>version</code> and <code>last_op_id</code> for safe updates.</td><td>Draft created; upload recorded; layout saved; published; each signature; completion; void/decline/expire.</td></tr>
+<tr><td><code>signers</code></td><td>Name, email, order (1–10), status, invited/viewed/signed times, decline reason, <b>evidence R2 key + hash</b>, consent time, IP, user agent.</td><td>Saved in prepare; invited; viewed; signed; declined; voided.</td></tr>
+<tr><td><code>signer_tokens</code></td><td>SHA-256 of each magic-link token, expiry (14 days), revoked time.</td><td>Each invite, reminder or re-issued link.</td></tr>
+<tr><td><code>signer_sessions</code></td><td>SHA-256 of the session cookie, absolute and idle expiry.</td><td>When a signer clicks “Review and sign”.</td></tr>
+<tr><td><code>audit_events</code></td><td>The hash chain: seq, type, actor, time, payload JSON, prev hash, hash.</td><td>Every meaningful change, in the same transaction as the change.</td></tr>
+<tr><td><code>outbox</code></td><td>Pending background events (<code>dispatch_next</code>, <code>send_email</code>, <code>notify_parties</code>, <code>anchor_manifest</code>).</td><td>In the same transaction as the state change.</td></tr>
+<tr><td><code>inbox</code></td><td>Event ids already processed, per consumer.</td><td>When a handler finishes.</td></tr>
+<tr><td><code>email_deliveries</code></td><td>One row per (event, recipient): claimed / sent / failed, provider message id.</td><td>Right before and after each send.</td></tr>
+<tr><td><code>idempotency_keys</code></td><td>Saved response for a signer request, so a retry returns the same answer.</td><td>With the signature commit.</td></tr>
+<tr><td><code>blob_intents</code></td><td>“I am about to write this R2 key.” Lets the sweeper delete orphans.</td><td>Just before an R2 write.</td></tr>
+<tr><td><code>dead_letters</code></td><td>Events that failed for good, kept for replay.</td><td>Queue consumer on permanent failure.</td></tr>
+<tr><td><code>user</code>, <code>session</code>, <code>account</code>, <code>verification</code></td><td>Creator accounts (better-auth). Only creators have these.</td><td>Sign up / sign in.</td></tr>
+<tr><td><code>_assert</code></td><td>A trick table (see <a href="#reliability">guarded batch</a>). Always empty.</td><td>Inside a batch, then deleted.</td></tr>
+</table>
+
+<h3>R2 keys (the blobs)</h3>
+<table>
+<tr><th>Key</th><th>What it is</th><th>Private?</th></tr>
+<tr><td><code>docs/&lt;documentId&gt;/&lt;sourceSha256&gt;.pdf</code></td><td>The <b>original</b> PDF exactly as uploaded.</td><td>Owner, signers with a live session, or a 10-minute read grant for a completed document.</td></tr>
+<tr><td><code>evidence/&lt;documentId&gt;/&lt;signerId&gt;/&lt;evidenceSha256&gt;.json</code></td><td>One signer’s <a href="#evidence">evidence</a>.</td><td><b>Yes.</b> Never served to the browser.</td></tr>
+<tr><td><code>manifests/&lt;documentId&gt;/&lt;manifestSha256&gt;.json</code></td><td>Anchored copy of the signed manifest.</td><td>Not served directly.</td></tr>
+<tr><td><code>anchors/&lt;documentId&gt;/&lt;seq&gt;.json</code></td><td>Signed checkpoint: “at audit entry <i>seq</i> the head hash was <i>H</i> and the manifest hash was <i>M</i>”.</td><td>Not served directly.</td></tr>
+</table>
+<div class="note">Keys contain the file’s own hash (“content-addressed”). Writing the same bytes gives the same key, and a key that already exists is never overwritten.</div>
+<div class="good"><b>Not stored anywhere on the server: the finished signed PDF.</b> It is rebuilt in the browser from the original PDF + the manifest whenever someone downloads it (<a href="#j-pdf">step 9</a>). The server only keeps the ingredients.</div>
+
+<h2>The journey, step by step</h2>
+<p>Legend: <span class="who b">Browser</span> <span class="who s">Server function / route</span> <span class="who q">Queue or cron</span> <span class="who o">Storage</span></p>
+
+<ol class="steps">
+<li id="j-account"><h4>1. Creator signs up or signs in</h4>
+<p><span class="who b">Browser</span><code>src/features/auth/auth-form.tsx</code> → better-auth client. <span class="who s">Server</span><code>src/routes/api/auth/$.ts</code> → <code>getAuth()</code> in <code>src/lib/auth.ts</code> (email + password, own hashing in <code>server/password.ts</code>).</p>
+<p class="writes"><b>Writes:</b> D1 <code>user</code>, <code>account</code>, <code>session</code>. Every owner action later calls <code>resolveActor()</code> (<code>server/actor.ts</code>) which turns the session cookie into the owner id.</p>
+</li>
+
+<li id="j-draft"><h4>2. Creator picks a PDF: draft and upload</h4>
+<p><span class="who b">Browser</span><code>initUpload()</code> in <code>features/editor/draft.ts</code>:</p>
+<ol>
+<li><code>readUpload()</code> reads the file, computes its <b>SHA-256</b>, counts pages and records each page’s geometry. The file does not leave the browser yet.</li>
+<li><span class="who s">Server</span><code>createDraftFn</code> → <code>createDraft()</code>: inserts the <code>documents</code> row (status <code>draft</code>, <code>upload_status: pending</code>) and audit entry #1 <code>document.created</code>, in one batch.</li>
+<li><code>initUploadFn</code> → <code>initUpload()</code>: records <i>expected</i> hash, size, page count and geometry (a guarded update with a version check). This is a promise: “the file I am about to send has this fingerprint”.</li>
+<li><code>PUT /files/documents/:id/source</code> → <code>putDocumentSource()</code> (<code>domain/source.ts</code>): checks the declared size matches, inserts a <code>blob_intents</code> row, then <code>env.STORAGE.put(key, body, { sha256 })</code>. R2 itself rejects the upload if the bytes do not match the promised hash. Then it reads the first 1 KB to confirm it starts with <code>%PDF</code>, and marks the document <code>uploaded</code> (plus audit #2 <code>document.source_uploaded</code>).</li>
+</ol>
+<p class="writes"><b>Writes:</b> D1 <code>documents</code>, <code>audit_events</code> (2 rows), <code>blob_intents</code>. R2 <code>docs/&lt;id&gt;/&lt;sha&gt;.pdf</code>.</p>
+<div class="note">Why hash first? The server never trusts the browser’s claim about the PDF. The hash was promised <i>before</i> the bytes arrived, R2 verifies it, and the same hash later appears in the manifest. Everything downstream is anchored to “these exact bytes”.</div>
+</li>
+
+<li id="j-prepare"><h4>3. Creator places fields and names signers</h4>
+<p><span class="who b">Browser</span>The editor (<code>features/editor</code>) keeps state locally and autosaves. <span class="who s">Server</span><code>savePreparationFn</code> → <code>savePreparation()</code> (<code>domain/documents.ts</code>) validates with zod (<code>core/contracts</code>, <code>core/signer-rules.ts</code>), then in one guarded batch rewrites the <code>signers</code> rows (order 1…n) and stores the <b>layout</b> as canonical JSON with <code>layout_version + 1</code> and its hash.</p>
+<pre><code>// one entry of layout.fields
+{ "id":"01M49…", "signerId":"01M49…", "pageIndex":0, "kind":"signature",
+  "x":694921, "y":745585, "w":184793, "h":45931, "required":true }   // micro units, 0..1,000,000</code></pre>
+<p class="writes"><b>Writes:</b> D1 <code>signers</code>, <code>documents.layout_json / layout_sha256 / layout_version</code>. No audit entry yet (nothing is binding until publish).</p>
+</li>
+
+<li id="j-publish"><h4>4. Creator clicks Send: publish</h4>
+<p><span class="who s">Server</span><code>publishFn</code> → <code>publish()</code>. It first runs <code>publishBlocker()</code> (<code>domain/publish-rules.ts</code>): upload finished, at least one signer, every signer has an email and a required signature, no field outside the page… Then <b>one atomic batch</b>:</p>
+<ul>
+<li>CAS update: <code>documents.status = 'in_progress'</code>, <code>expires_at = now + 30 days</code>, <code>version + 1</code> (only if still <code>draft</code> and at the same version).</li>
+<li>Audit entry <code>document.published</code> with the source, geometry and layout hashes. <b>This freezes what is being signed.</b></li>
+<li>Outbox row <code>dispatch_next</code>.</li>
+</ul>
+<p>Right after the commit, <code>publishOutboxQuietly()</code> pushes the outbox row onto the Queue (the “fast path”). If that push fails, the request still succeeds; the cron picks the row up within a minute.</p>
+<p class="writes"><b>Writes:</b> D1 <code>documents</code>, <code>audit_events</code>, <code>outbox</code>. Queue <code>ds-events</code>.</p>
+</li>
+
+<li id="j-invite"><h4>5. Background: invite the first signer and send the email</h4>
+<p><span class="who q">Queue</span><code>queue()</code> in <code>server-entry.ts</code> → <code>handleEventBatch</code> (<code>engine/consumer.ts</code>) → <code>processEvent</code> (<code>engine/handlers.ts</code>). Each message is only <code>{eventId, type, documentId}</code>; the handler loads the real payload from <code>outbox</code>.</p>
+<p><b>(a) <code>dispatch_next</code></b> → <code>inviteNextSigner()</code> (<code>domain/invite.ts</code>). It finds the first signer who has not signed; if that signer is <code>pending</code> and nobody earlier is unsigned, one batch does:</p>
+<ul>
+<li>signer <code>pending → invited</code> (CAS),</li>
+<li>new <code>signer_tokens</code> row holding <b>only the hash</b> of a fresh random token, expiring in 14 days,</li>
+<li>audit <code>signer.invited</code> (stores a hash of the email, not the email),</li>
+<li>outbox <code>send_email</code> whose payload temporarily contains the raw token.</li>
+</ul>
+<p><b>(b) <code>send_email</code></b> → <code>sendEmail()</code>: claims an <code>email_deliveries</code> row (so two workers cannot both send), builds the link <code>&lt;origin&gt;/s/&lt;token&gt;</code>, renders the HTML + text with <code>renderEmail()</code> (<code>server/mail/templates.ts</code>), sends through <code>getMailer()</code> (<code>server/mail/index.ts</code>: SMTP if configured, else Resend, else console), marks the delivery <code>sent</code>, and <b>scrubs the raw token out of the outbox row</b>. After that, nobody (not even the database) can reconstruct the link.</p>
+<p class="writes"><b>Writes:</b> D1 <code>signers</code>, <code>signer_tokens</code>, <code>audit_events</code>, <code>outbox</code>, <code>email_deliveries</code>, <code>inbox</code>. No R2.</p>
+</li>
+
+<li id="j-open"><h4>6. Signer opens the link</h4>
+<p><span class="who b">Browser</span><code>/s/$token</code> → <span class="who s">Server</span><code>peekInviteFn</code> → <code>peekInvite()</code>. This is <b>read-only</b>: it hashes the token, looks it up, and returns a minimal summary (document title, sender, how many fields, or a reason such as expired / replaced / cancelled). Opening the link records nothing and signs nothing.</p>
+<p>Clicking <b>Review and sign</b> → <code>exchangeSignerTokenFn</code> → <code>exchangeSignerToken()</code>: inserts a <code>signer_sessions</code> row (hash of a new random id) and sets the <code>digisign_signer</code> cookie. The token is <b>not consumed</b>; it stays valid for 14 days so a signer can come back.</p>
+<p>The desk (<code>/sign</code>) calls <code>getSigningContextFn</code> → <code>openSession()</code> + <code>buildView()</code>. The first time, <code>markViewed()</code> sets <code>first_viewed_at</code> and writes audit <code>signer.viewed</code>. The PDF itself is fetched from <code>GET /files/documents/:id/source</code> using the cookie (<code>readDocumentSource()</code> checks that the session’s signer belongs to this document).</p>
+<p class="writes"><b>Writes:</b> D1 <code>signer_sessions</code>, <code>signers.first_viewed_at</code>, <code>audit_events</code>. R2 is only read.</p>
+</li>
+
+<li id="j-sign"><h4>7. Signer signs</h4>
+<p><span class="who b">Browser</span><code>features/sign/signing-desk.tsx</code>: the signer fills fields; a signature is either <b>drawn</b> (strokes packed into a compact base64 string, <code>core/strokes-codec.ts</code>) or <b>typed</b> (name + font). Entries are kept in <code>sessionStorage</code> so a refresh loses nothing. On confirm, the browser sends <code>{ idempotencyKey, stateHash, consent: true, values[] }</code>.</p>
+<p><span class="who s">Server</span><code>submitSignatureFn</code> → <code>submitSignature()</code> (<code>domain/signing.ts</code>), in this order:</p>
+<ol>
+<li><b>Replay check:</b> same idempotency key + same request hash → return the saved answer. Same key, different body → error.</li>
+<li><b>Authorization:</b> session valid, document <code>in_progress</code>, signer <code>invited</code>.</li>
+<li><b>Completeness:</b> all this signer’s required fields have answers (<code>answerReady</code>).</li>
+<li><b>State hash:</b> recompute it from the stored document; mismatch → “This document changed”.</li>
+<li><b>Seal evidence:</b> <code>sealEvidence()</code> builds the <a href="#evidence">evidence</a> object, canonicalises it, hashes it, and the server writes it to R2 (<code>evidence/…</code>) after a <code>blob_intents</code> row.</li>
+<li><b>One atomic batch</b> (<code>guardedBatch</code>): signer → <code>signed</code> (with evidence key/hash, IP, user agent, consent time), document version bump, audit <code>signer.signed</code>, outbox event, idempotency row.</li>
+</ol>
+<p class="writes"><b>Writes:</b> R2 <code>evidence/…json</code>. D1 <code>signers</code>, <code>documents</code>, <code>audit_events</code>, <code>outbox</code> (<code>dispatch_next</code>), <code>idempotency_keys</code>, <code>blob_intents</code>.</p>
+<div class="note">If this is <b>not</b> the last signer, the outbox row is <code>dispatch_next</code> and step 5 repeats for the next person. That loop <i>is</i> the “strict order” promise.</div>
+</li>
+
+<li id="j-complete"><h4>8. The last signer: completion</h4>
+<p>In the same <code>submitSignature()</code> call, when everyone else has signed:</p>
+<ol>
+<li><code>buildCompletedManifest()</code> gathers every signer’s evidence summary and builds the <a href="#manifest">manifest</a>, including <code>audit.headSeq/headHash</code> (the chain head after this signature).</li>
+<li><code>signManifest()</code> canonicalises it, hashes it and signs it with <b>Ed25519</b>.</li>
+<li>The batch additionally sets <code>documents.status = 'completed'</code>, stores <code>manifest_json</code> (the signed envelope) and <code>manifest_sha256</code>, writes audit <code>document.completed</code>, and inserts <b>two</b> outbox rows: <code>anchor_manifest</code> and <code>notify_parties</code>.</li>
+</ol>
+<p>Then in the background:</p>
+<ul>
+<li><code>anchor_manifest</code> → <code>anchorManifest()</code>: copies the manifest to R2 <code>manifests/…</code>, signs a <b>checkpoint</b> <code>{documentId, seq, headHash, manifestSha256}</code> and writes it to <code>anchors/…</code>, then sets <code>documents.anchored_at</code>.</li>
+<li><code>notify_parties</code> → <code>notifyParties()</code>: one <code>send_email</code> outbox row per recipient (owner + each invited signer) using the “completed” template with a link to <code>/v/&lt;documentId&gt;</code>.</li>
+</ul>
+<p class="writes"><b>Writes:</b> D1 (<code>documents</code> completed + manifest, 2 audit rows, 2+ outbox rows). R2 <code>manifests/…</code>, <code>anchors/…</code>.</p>
+</li>
+
+<li id="j-pdf"><h4>9. The signed PDF is built in the browser</h4>
+<p><span class="who b">Browser</span>Confirmation screen and dashboard (<code>features/sign/confirmation.tsx</code>, <code>features/dashboard/signed-pdf.ts</code>) fetch the original PDF and call <code>render()</code> in <code>src/pdf/render.ts</code> with the manifest. It is <b>deterministic</b>: same inputs, same bytes. It:</p>
+<ul>
+<li>draws every field value onto its page (drawn strokes, typed signature in an embedded script font, dates, text, check marks),</li>
+<li>adds a footer to each original page: a hairline and one line, “Signed with DigiSign · &lt;verify address&gt;”,</li>
+<li>appends a branded <b>certificate of completion</b> (one page for a normal document, more only for very long signer lists): title and facts, the signers in order with UTC times, a QR code with “Check this file”, and the three SHA-256 fingerprints,</li>
+<li>sets the PDF Info key <code>DigiSignDocumentId</code>,</li>
+<li>attaches <code>digisign-manifest.json</code> inside the PDF: the <b>server’s signed envelope, byte for byte</b> (<code>documents.manifest_json</code>, returned to the browser as <code>record.envelope</code>). The browser never rebuilds or edits it.</li>
+</ul>
+<p>That attachment makes the file self-describing and independently checkable: it names the document and carries the Ed25519 signature, so anyone with the public key can verify the manifest even without our server. The signer’s confirmation screen, the dashboard download and the verify page all draw the PDF from the same server record, so they all produce identical bytes.</p>
+<div class="note"><b>Renderer version.</b> Because verification compares bytes, any change to the drawing code changes every PDF. The manifest records <code>renderer.version</code> (now <code>1.1.0</code>, constants in <code>src/core/renderer.ts</code>; the design is in <code>src/pdf/branded.ts</code>). Nothing is published yet, so there is only one drawing path. <b>Before the first real document is signed</b>, decide the rule: from then on, never edit released drawing code. Add a new version and dispatch on <code>manifest.renderer.version</code>, so old documents keep verifying.</div>
+</li>
+
+<li id="j-verify"><h4>10. Anyone checks a PDF</h4>
+<p><span class="who b">Browser</span><code>/verify</code> (<code>features/verify</code>). The file never leaves the browser until it is identified:</p>
+<ol>
+<li><code>identifyPdf()</code> finds the document id: embedded manifest first, then the Info key, then the footer text.</li>
+<li><span class="who s">Server</span><code>verifyManifestFn</code> → <code>verifyRecord()</code> (<code>domain/verify.ts</code>) recomputes everything it can: the <b>Ed25519 signature</b> over the manifest, the manifest hash, the source hash, the whole <b>audit chain</b> (every hash, in order, ending at the head the manifest names), and that the original PDF still exists in R2. It also returns a 10-minute read grant for the original PDF.</li>
+<li><span class="who b">Browser</span>fetches the original with the grant, <b>re-renders</b> the final PDF from original + manifest, and compares it to the file the person dropped.</li>
+<li><code>decideOutcome()</code> (<code>features/verify/outcome.ts</code>) turns the results into one of seven verdicts: <i>valid, modified, not-comparable, record-only, not-found, failed-checks, incomplete</i>.</li>
+</ol>
+<p>Public audit rows contain hashes and times only; <b>no emails, IPs or user agents</b>.</p>
+</li>
+
+<li id="j-other"><h4>11. Other endings</h4>
+<table>
+<tr><th>Event</th><th>Function</th><th>What happens</th></tr>
+<tr><td>Signer declines</td><td><code>declineSignature()</code></td><td>Signer and document → <code>declined</code>; audit <code>signer.declined</code> + <code>document.declined</code>; outbox <code>notify_parties</code>. The reason is emailed to the owner only.</td></tr>
+<tr><td>Owner voids</td><td><code>voidDocument()</code></td><td>Document → <code>voided</code>; pending/invited signers → <code>voided</code>; audit <code>document.voided</code>; notice to everyone invited.</td></tr>
+<tr><td>30 days pass</td><td>cron → <code>expireDue()</code> → <code>expireDocument()</code></td><td>Document → <code>expired</code>; waiting signers voided; links and sessions revoked; audit <code>document.expired</code>; notices sent.</td></tr>
+<tr><td>Owner re-sends a link</td><td><code>reissueInviteFn</code> → <code>reissueSignerLink()</code></td><td>Old token revoked (“link replaced”), new token + email.</td></tr>
+<tr><td>3 days without signing</td><td>cron → <code>queueReminders()</code></td><td>One reminder per signer, ever (the outbox id <code>reminder:&lt;signerId&gt;</code> can only be inserted once).</td></tr>
+</table>
+</li>
+</ol>
+
+<h2 id="evidence">Evidence (deep dive)</h2>
+<p><b>Evidence is the private proof of one person signing.</b> It answers: who, when, from where, what exactly did they enter, and did they consent. It is private because it contains personal data.</p>
+<pre><code>// stored in R2 at evidence/&lt;doc&gt;/&lt;signer&gt;/&lt;sha&gt;.json  (canonical JSON)
+{
+  "documentId": "01M49…",  "signerId": "01M49…",
+  "signedAt": 1791323229260,
+  "values": [ { "fieldId":"…", "signature":{ "kind":"drawn", "box":{…}, "strokes":"CABb…" } },
+              { "fieldId":"…", "text":"TYO" } ],
+  "valuesSha256": "b3be2b…",                 // fingerprint of just the values
+  "email": "…", "ip": "…", "userAgent": "…", // PRIVATE
+  "consentAt": 1791323229260,
+  "invitedAt": …, "firstViewedAt": …,
+  "privateEvidenceSha256": "c0a83b…"         // fingerprint of the private part
+}</code></pre>
+<p><b>How it connects to the public record.</b> The file’s own SHA-256 is saved in <code>signers.evidence_sha256</code> and in the audit entry <code>signer.signed</code>. The manifest does <i>not</i> contain the email or IP; it contains <code>valuesSha256</code> and <code>privateEvidenceSha256</code>. That is a <b>commitment</b>: if a dispute ever arises, you can reveal the private evidence and anyone can check it hashes to the value already sealed in the signed manifest, without the public ever having seen it.</p>
+<div class="note">Evidence is written <b>before</b> the database commit. If the commit then fails, the R2 object is an orphan; the <code>blob_intents</code> row lets the sweeper delete it after a day.</div>
+
+<h2 id="manifest">Manifest (deep dive)</h2>
+<p><b>The manifest is the signed, public description of a finished document.</b> Everything needed to redraw the PDF and to check it, nothing private.</p>
+<pre><code>// documents.manifest_json  =  the signed ENVELOPE
+{
+  "manifest": {
+    "v": 1, "documentId": "01M49…", "title": "…",
+    "source": { "sha256": "cc3ff8…", "size": 183204 },   // the original PDF
+    "geometrySha256": "a9e76a…", "layoutSha256": "…",
+    "geometry": [ { "mediaBox":[0,0,595.28,841.89], "cropBox":[…], "rotate":0 } ],
+    "layout":   { "documentId":"…", "layoutVersion":3, "fields":[ … ] },
+    "signers":  [ { "order":1, "signerId":"…", "name":"TYO", "signedAt":1791323229260,
+                    "values":[ … ], "valuesSha256":"…", "privateEvidenceSha256":"…" } ],
+    "completedAt": 1791323229260,
+    "audit":    { "headSeq": 9, "headHash": "8a5a08…" },  // ties the manifest to the chain
+    "renderer": { "name":"digisign-render", "version":"1.0.0" }
+  },
+  "keyId": "k1",
+  "sig": "WE0fP80x3P…"     // Ed25519 signature over canonicalJson(manifest)
+}</code></pre>
+<p><b>Where copies live:</b> (1) D1 <code>documents.manifest_json</code>, the primary copy; (2) inside every downloaded PDF as <code>digisign-manifest.json</code>, the same signed bytes; (3) R2 <code>manifests/…</code> after anchoring.</p>
+<p><b>What it proves.</b> The signature proves DigiSign’s server produced exactly this manifest. The <code>source.sha256</code> proves which original PDF it is about. <code>audit.headHash</code> proves which history it was built from. The renderer is deterministic, so original + manifest always produce the same final PDF bytes, and that is how a modified file is detected.</p>
+
+<h2 id="audit">Audit chain (deep dive)</h2>
+<p>One row per event, per document, in <code>audit_events</code>, written <b>in the same transaction</b> as the change it describes.</p>
+<table>
+<tr><th>seq</th><th>type</th><th>actor</th><th>payload (examples)</th></tr>
+<tr><td>1</td><td><code>document.created</code></td><td>owner</td><td><code>{title}</code></td></tr>
+<tr><td>2</td><td><code>document.source_uploaded</code></td><td>owner</td><td><code>{sourceSha256}</code></td></tr>
+<tr><td>3</td><td><code>document.published</code></td><td>owner</td><td><code>{sourceSha256, geometrySha256, layoutSha256}</code></td></tr>
+<tr><td>4</td><td><code>signer.invited</code></td><td>system</td><td><code>{signerId, order, emailSha256}</code></td></tr>
+<tr><td>5</td><td><code>signer.viewed</code></td><td>signer</td><td><code>{signerId}</code></td></tr>
+<tr><td>6</td><td><code>signer.signed</code></td><td>signer</td><td><code>{signerId, evidenceSha256, stateHash}</code></td></tr>
+<tr><td>…</td><td>repeat invited / viewed / signed for each signer</td><td></td><td></td></tr>
+<tr><td>last</td><td><code>document.completed</code></td><td>system</td><td><code>{manifestSha256}</code></td></tr>
+<tr><td colspan="4">Other types: <code>signer.declined</code>, <code>document.declined</code>, <code>document.voided</code>, <code>document.expired</code>.</td></tr>
+</table>
+<p><b>How the chain works.</b> Each row’s <code>hash</code> is the SHA-256 of its own fields <i>plus the previous row’s hash</i> (<code>planAudit()</code> in <code>domain/audit.ts</code>):</p>
+<pre><code>genesis = sha256("digisign:genesis:" + documentId)        // the “row 0” hash
+hash[n] = sha256( canonicalJson({ documentId, seq, type, actorType, actorId,
+                                  occurredAt, payload, prevHash: hash[n-1] }) )</code></pre>
+<p>Change or delete row 5 and every later hash stops matching. <code>verifyRecord()</code> replays the whole chain and also requires that the manifest’s <code>audit.headSeq/headHash</code> exists in it.</p>
+<div class="warn">The chain is <b>tamper-evident</b>, not tamper-proof: someone with full database write access could rewrite the whole chain consistently. The signed manifest and the R2 checkpoint raise the bar (they pin the head hash), and a future external timestamp would close the gap. See <a href="#gaps">Known gaps</a>.</div>
+
+<h2 id="keys">Signing key</h2>
+<ul>
+<li><b>Algorithm:</b> Ed25519 via Web Crypto (<code>server/manifest-key.ts</code>).</li>
+<li><b>Private key:</b> secret <code>MANIFEST_SIGNING_KEY</code> (base64 PKCS8). Key id is the constant <code>k1</code> in code.</li>
+<li><b>Public key:</b> <code>GET /.well-known/digisign-keys.json</code>. Anyone can verify a manifest with it, independent of our server.</li>
+<li><b>If the secret is missing</b>, the code generates a random throw-away key labelled <code>dev</code> per server instance. Fine for local work; in production it would make old manifests unverifiable. It is set in production today.</li>
+<li><b>Rotation:</b> not built. A new key would need a new <code>keyId</code> and a list of old public keys.</li>
+<li>The same secret also keys the HMAC for 10-minute <b>read grants</b> (<code>domain/grants.ts</code>).</li>
+</ul>
+
+<h2 id="reliability">Reliability patterns</h2>
+<p>The app runs on serverless pieces that can fail between any two steps. These patterns make “half done” impossible or repairable.</p>
+<table>
+<tr><th>Problem</th><th>Pattern</th><th>Where</th></tr>
+<tr><td>Two people edit at once</td><td><b>CAS</b>: updates say <code>WHERE version = &lt;what I read&gt;</code>; a miss aborts everything.</td><td><code>guardedBatch</code> in <code>db/guarded-batch.ts</code></td></tr>
+<tr><td>D1 batches are atomic but cannot “abort if 0 rows changed”</td><td><b>Assert trick</b>: after each CAS statement insert <code>changes()</code> into <code>_assert</code>, which has <code>CHECK (ok = 1)</code>. Zero rows → check fails → the whole batch rolls back.</td><td><code>guardedBatch</code>, table <code>_assert</code></td></tr>
+<tr><td>A commit succeeded but the response was lost</td><td><b>opId replay</b>: each write stores <code>last_op_id</code>; on error we check if our id is already there and treat it as success.</td><td><code>commitOrReplay</code></td></tr>
+<tr><td>“Change saved” but “email queued” disagree</td><td><b>Transactional outbox</b>: the event row commits with the change; a publisher forwards it.</td><td><code>engine/outbox.ts</code></td></tr>
+<tr><td>Queue delivers twice, or the publisher crashes after sending</td><td><b>At-least-once + dedupe</b>: handlers are idempotent; <code>inbox</code> records handled ids; email uses a claim row and the provider idempotency key.</td><td><code>engine/handlers.ts</code></td></tr>
+<tr><td>Browser retries a signature</td><td><b>Idempotency key</b>: same key + same body → the saved response.</td><td><code>idempotency_keys</code></td></tr>
+<tr><td>R2 write happened, DB commit did not</td><td><b>Blob intents</b>: sweeper deletes unreferenced objects older than a day.</td><td><code>collectBlobs()</code></td></tr>
+<tr><td>A queue message is lost</td><td><b>Sweeper</b> republishes stale outbox rows (30 s), re-dispatches stalled signers (10 min), re-anchors (10 min).</td><td><code>engine/sweeper.ts</code></td></tr>
+<tr><td>A message fails for good</td><td><b>Dead letter</b> table; replay with <code>scripts/replay-dead-letter.mjs</code>.</td><td><code>engine/consumer.ts</code></td></tr>
+<tr><td>Provider errors</td><td>4xx/5xx classification: permanent → dead letter and mark failed; transient → retry with backoff.</td><td><code>mail/resend.ts</code>, <code>mail/smtp.ts</code></td></tr>
+</table>
+
+<h2 id="security">Security and privacy</h2>
+<table>
+<tr><th>Concern</th><th>What the code does</th></tr>
+<tr><td>Stolen database</td><td>Magic-link tokens and session ids are stored only as SHA-256 hashes. The raw token is scrubbed from the outbox after the email is sent.</td></tr>
+<tr><td>Other signers’ privacy</td><td>A signer’s browser never receives other signers’ emails, IPs or user agents. They see only names and statuses.</td></tr>
+<tr><td>Public data</td><td>The public audit view and manifest hold names, values, hashes and times. Emails appear only as hashes; IPs and user agents only inside private evidence.</td></tr>
+<tr><td>Decline reason</td><td>Emailed to the document owner only, never to other signers.</td></tr>
+<tr><td>Link replay</td><td>Opening a link records nothing and does not consume it. A session (2 h, 30 min idle) is required to view or sign. A re-issued link revokes the old one.</td></tr>
+<tr><td>Wrong-time signing</td><td>The state hash blocks signing if the document changed; status and CAS checks block double signing.</td></tr>
+<tr><td>Cross-site requests</td><td><code>crossSiteRejection()</code> in <code>server/security.ts</code>; security headers on every response.</td></tr>
+<tr><td>Who can read the PDF</td><td>The owner; a signer with a valid session on that document; or anyone with a 10-minute HMAC grant, issued only for completed documents.</td></tr>
+<tr><td>Input</td><td>Every server function validates with zod (<code>strictObject</code>, size and count limits).</td></tr>
+</table>
+<div class="warn"><b>Not built yet:</b> rate limiting, a signer one-time code (email OTP) on top of the link, email verification and password reset for creators. A link is a bearer credential: whoever holds it can sign as that person.</div>
+
+<h2 id="decisions">Decisions and why</h2>
+<dl>
+<dt>PDF work in the browser, not the Worker</dt><dd>Workers have a size and CPU budget; pdf.js, pdf-lib and fonts are large. The server never opens a PDF. <code>pnpm check:bundle</code> fails the build if those libraries leak into the Worker bundle. Browser-only screens load through <code>lazyDesk()</code>.</dd>
+<dt>Server stores facts, browser draws the result</dt><dd>The final PDF is not stored; it is regenerated deterministically. Less storage, and verification works by re-rendering and comparing.</dd>
+<dt>Hash the file before uploading</dt><dd>The server learns the expected fingerprint first, R2 enforces it, and the manifest repeats it: one chain of “this exact file”.</dd>
+<dt>Canonical JSON everywhere</dt><dd>Hashes and signatures only work if both sides serialise identically. One implementation in <code>core</code>.</dd>
+<dt>Content-addressed R2 keys</dt><dd>The key includes the hash, so objects are immutable in practice and safe to write twice.</dd>
+<dt>D1 for facts, R2 for blobs</dt><dd>Small, queryable, transactional data in SQLite; larger or private files in object storage.</dd>
+<dt>Outbox + Queue + cron instead of “do it in the request”</dt><dd>Sending email must never block or break a signature. State and event commit together; delivery can retry independently.</dd>
+<dt>Strict sequential invite</dt><dd>Enforced in <code>inviteNextSigner()</code> by order, status and CAS, and re-triggered by each signature’s <code>dispatch_next</code>. Not just a UI rule.</dd>
+<dt>Evidence separated from manifest</dt><dd>Public verifiability without publishing personal data, with a hash commitment that allows later disclosure.</dd>
+<dt>No accounts for signers</dt><dd>Lower friction. The trade-off is that the link is the credential, which is why the session window is short and links can be replaced.</dd>
+<dt>Dates in UTC</dt><dd>“Date signed” is the server time in UTC, shown with the zone, so it never depends on a signer’s device clock.</dd>
+</dl>
+
+<h2 id="states">Status rules</h2>
+<div class="cols">
+<div class="card"><b>Document</b><pre><code>draft ──publish──▶ in_progress ─┬▶ completed
+                                ├▶ declined
+                                ├▶ voided
+                                └▶ expired
+(completed, declined, voided, expired are final)</code></pre></div>
+<div class="card"><b>Signer</b><pre><code>pending ─invite─▶ invited ─┬▶ signed
+   │                       ├▶ declined
+   └──────────▶ voided ◀───┘
+(signed, declined, voided are final)</code></pre></div>
+</div>
+<p>Defined in <code>src/core/fsm.ts</code> and enforced again by <code>CHECK</code> constraints in the schema and by <code>WHERE status = …</code> in every update.</p>
+
+<h2 id="limits">Limits</h2>
+<table>
+<tr><th>Thing</th><th>Limit</th></tr>
+<tr><td>PDF size / pages</td><td>25 MB / 200 pages</td></tr>
+<tr><td>Signers per document</td><td>10</td></tr>
+<tr><td>Fields per document / page</td><td>300 / 40</td></tr>
+<tr><td>Drawn signature</td><td>64 strokes, 8,000 points</td></tr>
+<tr><td>Text field / typed signature</td><td>240 / 64 characters</td></tr>
+<tr><td>Request body</td><td>128 KB</td></tr>
+<tr><td>Magic link life / session</td><td>14 days / 2 h absolute, 30 min idle</td></tr>
+<tr><td>Document life after publish</td><td>30 days</td></tr>
+<tr><td>Reminder</td><td>one, after 3 days</td></tr>
+<tr><td>Verify read grant</td><td>10 minutes</td></tr>
+</table>
+
+<h2 id="config">Config and deploy</h2>
+<table>
+<tr><th>Name</th><th>Kind</th><th>Purpose</th><th>Production today</th></tr>
+<tr><td><code>DB</code> (D1), <code>STORAGE</code> (R2), <code>Q_EVENTS</code></td><td>Bindings in <code>wrangler.jsonc</code></td><td>Database, blobs, queue.</td><td>Configured</td></tr>
+<tr><td><code>MANIFEST_SIGNING_KEY</code></td><td>Secret</td><td>Ed25519 private key; also HMAC for grants.</td><td>Set</td></tr>
+<tr><td><code>BETTER_AUTH_SECRET</code></td><td>Secret</td><td>Signs creator sessions.</td><td>Set</td></tr>
+<tr><td><code>BETTER_AUTH_URL</code></td><td>Variable</td><td>Public site address for auth.</td><td><b>Missing</b></td></tr>
+<tr><td><code>APP_ORIGIN</code></td><td>Variable</td><td>Origin used in links built without a request (cron, queue); also cross-site check.</td><td><b>Still <code>http://localhost:3000</code></b></td></tr>
+<tr><td><code>SMTP_USER</code>, <code>SMTP_PASS</code></td><td>Secrets</td><td>Gmail SMTP (preferred when set).</td><td>Missing</td></tr>
+<tr><td><code>RESEND_API_KEY</code>, <code>MAIL_FROM</code></td><td>Secrets</td><td>Resend (used when SMTP is not set).</td><td>Missing</td></tr>
+<tr><td>Cron</td><td><code>* * * * *</code></td><td>Runs the sweeper every minute; cheap “gates” skip work when idle.</td><td>Configured</td></tr>
+</table>
+<p>Mail chooser (<code>server/mail/index.ts</code>): SMTP → Resend → console. In dev the real sender also prints each mail (recipient, names, links) to the terminal.</p>
+<p>Local: <code>.dev.vars</code> (git-ignored) holds secrets; <code>pnpm dev</code> runs the app on port 3000 with a local D1/R2/Queue. Deploy: <code>pnpm run deploy</code> (build + <code>wrangler deploy</code>); migrations: <code>/migrations</code>, applied with wrangler d1.</p>
+<div class="bad"><b>Fix before real use.</b> On the deployed site <code>GET /api/auth/get-session</code> currently answers <b>500</b>: the auth setup reads <code>BETTER_AUTH_URL</code>, which is not defined in production, so <b>sign-in and sign-up cannot work</b>. Also set <code>APP_ORIGIN</code> to the live address and add the mail secrets, otherwise emails and queue-built links point nowhere.</div>
+
+<h2 id="codemap">Code map: which file to open</h2>
+<table>
+<tr><th>I want to understand…</th><th>Open</th></tr>
+<tr><td>Everything entering the Worker</td><td><code>src/server-entry.ts</code></td></tr>
+<tr><td>Creating, preparing, publishing, voiding</td><td><code>src/server/domain/documents.ts</code> (called by <code>src/server/documents.ts</code>)</td></tr>
+<tr><td>PDF upload and download rules</td><td><code>src/server/domain/source.ts</code>, <code>src/routes/files/documents/$id/source.ts</code></td></tr>
+<tr><td>Inviting the next signer, re-issuing links</td><td><code>src/server/domain/invite.ts</code></td></tr>
+<tr><td>Opening a link, session, submitting a signature, declining</td><td><code>src/server/domain/signing.ts</code></td></tr>
+<tr><td>Evidence and manifest shapes, signing</td><td><code>src/server/domain/evidence.ts</code>, <code>src/server/manifest-key.ts</code></td></tr>
+<tr><td>Audit chain</td><td><code>src/server/domain/audit.ts</code></td></tr>
+<tr><td>Public verification</td><td><code>src/server/domain/verify.ts</code>, <code>src/features/verify/*</code></td></tr>
+<tr><td>Background work</td><td><code>src/server/engine/{outbox,consumer,handlers,sweeper}.ts</code></td></tr>
+<tr><td>Safe database writes</td><td><code>src/db/guarded-batch.ts</code></td></tr>
+<tr><td>Emails</td><td><code>src/server/mail/*</code> (templates in <code>templates/</code>)</td></tr>
+<tr><td>Final PDF drawing</td><td><code>src/pdf/render.ts</code></td></tr>
+<tr><td>Editor / signing desk UI</td><td><code>src/features/editor/*</code>, <code>src/features/sign/*</code></td></tr>
+<tr><td>Rules, limits, shared types</td><td><code>src/core/*</code> (<code>contracts/index.ts</code> is the input schemas)</td></tr>
+<tr><td>Design tokens and UI rules</td><td><code>src/docs/design-system/DESIGN.md</code></td></tr>
+<tr><td>Original plans</td><td><code>src/docs/masterplan.md</code>, <code>src/docs/phases/*</code></td></tr>
+</table>
+
+<h2 id="gaps">Known gaps and open decisions</h2>
+<ul>
+<li><b>“Anchored” is a copy in our own R2, not an outside timestamp.</b> The checkpoint is signed by our key and never overwritten, but a third party (an RFC 3161 timestamp authority, a transparency log) would be needed to prove the record existed at a time without trusting us. The UI wording (“Timestamp anchoring: Complete / In progress”) should be confirmed against this.</li>
+<li><b>Legal text.</b> The “How electronic signing works” dialog shows a placeholder (<code>TODO(legal)</code>) and the consent wording needs legal review.</li>
+<li><b>Personal data at rest.</b> Signer emails sit in plain text in D1 and in evidence files; IP and user agent are stored per signature. A retention policy is not defined.</li>
+<li><b>Signing key rotation and revocation</b> are not implemented (single <code>k1</code>).</li>
+<li><b>Link is a bearer credential;</b> no second factor and no rate limits yet.</li>
+<li><b>Email deliverability:</b> Gmail SMTP is a stop-gap (about 500 recipients a day). A verified domain with Resend is the long-term path.</li>
+<li><b>Non-Latin text in the PDF.</b> Field text and the certificate use built-in PDF fonts that only cover Western European characters. A value in another script (for example Bengali or Chinese) no longer breaks the PDF, but each character the font cannot draw is shown as “?”. Real support needs a bundled Unicode font (a subset of Noto Sans per script), which is a size and licensing decision.</li>
+<li><b>Production configuration</b> items listed under “Config and deploy” are unresolved.</li>
+</ul>
+
+<p class="hash" style="margin-top:48px">Generated from the code at commit time. If a file named here has moved, search for the function name.</p>
+</main>
+</div>
+</body>
+</html>

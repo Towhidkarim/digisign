@@ -53,6 +53,17 @@ describe('phase 3 verification', () => {
     const record = await verifyRecord(built.documentId, Date.now());
     expect(recordIsGenuine(record)).toBe(true);
     if (!record.found) throw new Error('Record missing.');
+    // The signed PDF embeds these exact bytes, signature included.
+    const stored = await env.DB.prepare(
+      'SELECT manifest_json FROM documents WHERE id = ?',
+    )
+      .bind(built.documentId)
+      .first<{ manifest_json: string }>();
+    expect(record.envelope).toBe(stored?.manifest_json);
+    expect(JSON.parse(record.envelope)).toMatchObject({
+      keyId: 'k1',
+      manifest: { renderer: { name: 'digisign-render', version: '1.1.0' } },
+    });
     expect(record.checks).toEqual({
       signature: true,
       manifestSha256: true,
@@ -196,7 +207,7 @@ describe('verify outcomes', () => {
   it('reads the id and origin from the footer text', () => {
     expect(
       parseFooter(
-        'DigiSign · 01HZZZZZZZZZZZZZZZZZZZZZZZ · abcdef012345 · https://sign.example.com/v/01HZZZZZZZZZZZZZZZZZZZZZZZ',
+        'Signed with DigiSign · https://sign.example.com/v/01HZZZZZZZZZZZZZZZZZZZZZZZ',
       ),
     ).toEqual({
       documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',

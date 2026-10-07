@@ -27,6 +27,8 @@ export type VerifyRecord =
       documentId: string;
       title: string;
       keyId: string;
+      /** The signed manifest exactly as stored. The signed PDF embeds these bytes. */
+      envelope: string;
       anchored: boolean;
       checks: {
         signature: boolean;
@@ -115,6 +117,7 @@ export async function verifyRecord(
     documentId: document.id,
     title: document.title,
     keyId: envelope.keyId,
+    envelope: document.manifestJson,
     anchored: document.anchoredAt != null,
     checks: {
       signature,
