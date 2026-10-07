@@ -50,7 +50,8 @@
 		]
 	},
 	"vars": {
-		"APP_ORIGIN": "http://localhost:3000"
+		"APP_ORIGIN": "https://digisign.towhidkarim123.workers.dev",
+		"BETTER_AUTH_URL": "https://digisign.towhidkarim123.workers.dev"
 	},
 	"triggers": {
 		"crons": ["* * * * *"]
