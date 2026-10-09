@@ -50,8 +50,8 @@
 		]
 	},
 	"vars": {
-		"APP_ORIGIN": "https://digisign.towhidkarim123.workers.dev",
-		"BETTER_AUTH_URL": "https://digisign.towhidkarim123.workers.dev"
+		"APP_ORIGIN": "https://digisign.towhidkarim.dev",
+		"BETTER_AUTH_URL": "https://digisign.towhidkarim.dev"
 	},
 	"triggers": {
 		"crons": ["* * * * *"]
