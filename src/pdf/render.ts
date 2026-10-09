@@ -32,11 +32,19 @@ const INK = rgb(18 / 255, 52 / 255, 74 / 255);
 /**
  * Draws the signed PDF. Same inputs, same bytes: verification compares them.
  * `envelope` is the server's signed manifest exactly as stored. It is embedded untouched.
+ *
+ * A `preview` draws the signatures recorded so far with a "Preview" stamp, and leaves out the
+ * certificate, the verification footers and the envelope, so it can never pass as the record.
  */
 export async function render(
   originalBytes: Uint8Array,
   manifest: LocalManifest,
-  options: { fonts: ScriptFontBytes; verifyOrigin: string; envelope: string },
+  options: {
+    fonts: ScriptFontBytes;
+    verifyOrigin: string;
+    envelope?: string;
+    preview?: { signedCount: number; total: number };
+  },
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.load(originalBytes, { updateMetadata: false });
   const body = await pdf.embedFont(StandardFonts.Helvetica);
@@ -52,8 +60,12 @@ export async function render(
     drawField(page, geometry, field, value, body, script, options.fonts);
   }
 
-  await drawBrandedFooters(pdf, manifest, verifyUrl);
-  await drawBrandedCertificate(pdf, manifest, verifyUrl);
+  if (options.preview) {
+    drawPreviewStamp(pages, body, options.preview);
+  } else {
+    await drawBrandedFooters(pdf, manifest, verifyUrl);
+    await drawBrandedCertificate(pdf, manifest, verifyUrl);
+  }
   const completed = new Date(manifest.completedAt);
   pdf.setTitle(manifest.title);
   pdf.setAuthor('DigiSign');
@@ -68,14 +80,36 @@ export async function render(
   );
   const id = PDFHexString.of(manifest.source.sha256);
   pdf.context.trailerInfo.ID = pdf.context.obj([id, id]);
-  const payload = new TextEncoder().encode(options.envelope);
-  await pdf.attach(payload, 'digisign-manifest.json', {
-    mimeType: 'application/json',
-    description: 'DigiSign manifest',
-    creationDate: completed,
-    modificationDate: completed,
-  });
+  if (options.envelope != null) {
+    const payload = new TextEncoder().encode(options.envelope);
+    await pdf.attach(payload, 'digisign-manifest.json', {
+      mimeType: 'application/json',
+      description: 'DigiSign manifest',
+      creationDate: completed,
+      modificationDate: completed,
+    });
+  }
   return pdf.save({ useObjectStreams: false, updateFieldAppearances: false });
+}
+
+/** A small grey label at the top of each page. It says the copy is not the final record. */
+function drawPreviewStamp(
+  pages: PDFPage[],
+  font: PDFFont,
+  progress: { signedCount: number; total: number },
+): void {
+  const label = `PREVIEW · ${progress.signedCount} of ${progress.total} signed`;
+  for (const page of pages) {
+    const { width, height } = page.getSize();
+    const size = 8;
+    page.drawText(label, {
+      x: width - 36 - font.widthOfTextAtSize(label, size),
+      y: height - 22,
+      size,
+      font,
+      color: rgb(0.45, 0.5, 0.55),
+    });
+  }
 }
 
 async function embedScripts(

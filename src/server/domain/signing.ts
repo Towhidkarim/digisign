@@ -961,7 +961,7 @@ async function replayIdempotency(
   return JSON.parse(row.responseJson) as SubmitResult;
 }
 
-function readGeometry(geometryJson: string | null): PageGeometryInput[] {
+export function readGeometry(geometryJson: string | null): PageGeometryInput[] {
   const parsed = geometryList.safeParse(
     geometryJson ? JSON.parse(geometryJson) : null,
   );
@@ -970,7 +970,7 @@ function readGeometry(geometryJson: string | null): PageGeometryInput[] {
   return parsed.data;
 }
 
-function readLayout(
+export function readLayout(
   documentId: string,
   layoutJson: string | null,
   layoutVersion: number,

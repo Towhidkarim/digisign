@@ -7,7 +7,9 @@ import {
   Clock,
   Copy,
   Download,
+  Eye,
   FileText,
+  LoaderCircle,
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react';
@@ -35,6 +37,7 @@ import {
   formatWhen,
 } from '#/features/dashboard/format.ts';
 import { SigningOrder } from '#/features/dashboard/signing-order.tsx';
+import { lazyDesk } from '#/lib/lazy-desk.tsx';
 import { cn } from '#/lib/utils.ts';
 import { reissueInviteFn, voidDocumentFn } from '#/server/documents.ts';
 import type {
@@ -47,14 +50,29 @@ const loadSignedPdf = import.meta.env.SSR
   ? null
   : () => import('#/features/dashboard/signed-pdf.ts');
 
+const PreviewDialog = lazyDesk<{
+  bytes: Uint8Array;
+  description: string;
+  onClose: () => void;
+}>(
+  import.meta.env.SSR
+    ? null
+    : () =>
+        import('#/features/dashboard/preview-dialog.tsx').then((module) => ({
+          default: module.PdfPreviewDialog,
+        })),
+  null,
+);
+
 type Notice = { tone: 'info' | 'destructive'; text: string };
-type Busy = 'link' | 'void' | 'signed' | null;
+type Busy = 'link' | 'void' | 'signed' | 'preview' | null;
 
 export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
   const router = useRouter();
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [voidOpen, setVoidOpen] = useState(false);
+  const [preview, setPreview] = useState<Uint8Array | null>(null);
 
   const status = isDocumentStatus(document.status) ? document.status : 'draft';
   const title = displayTitle(document.title);
@@ -72,6 +90,10 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
   const lastActivity =
     document.activity.at(-1)?.occurredAt ?? document.updatedAt;
   const completed = status === 'completed';
+  const signedCount = document.signers.filter(
+    (signer) => signer.status === 'signed',
+  ).length;
+  const hasSigned = signedCount > 0;
 
   async function copyLink(signer: OwnedSigner) {
     setBusy('link');
@@ -108,6 +130,23 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
     }
     setNotice({ tone: 'info', text: 'This document is voided.' });
     await router.invalidate();
+  }
+
+  async function previewIt() {
+    if (!loadSignedPdf) return;
+    setBusy('preview');
+    setNotice(null);
+    const { previewPdfBytes, signedPdfBytes } = await loadSignedPdf();
+    // A finished document previews as its signed PDF; anything else shows the signatures so far.
+    const bytes = completed
+      ? await signedPdfBytes(document.id)
+      : await previewPdfBytes(document.id);
+    setBusy(null);
+    if ('error' in bytes) {
+      setNotice({ tone: 'destructive', text: bytes.error });
+      return;
+    }
+    setPreview(bytes);
   }
 
   async function downloadSigned() {
@@ -147,7 +186,7 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
         Documents
       </Link>
 
-      <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
+      <div className="mt-4 flex flex-col gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="text-title font-semibold tracking-tight break-words">
@@ -165,6 +204,25 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
               <Link to="/prepare" search={{ documentId: document.id }}>
                 Continue editing
               </Link>
+            </Button>
+          ) : null}
+          {hasSigned && (status === 'in_progress' || completed) ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={busy !== null}
+              onClick={() => void previewIt()}
+            >
+              {busy === 'preview' ? (
+                <LoaderCircle
+                  aria-hidden="true"
+                  className="animate-spin motion-reduce:animate-none"
+                />
+              ) : (
+                <Eye strokeWidth={1.75} />
+              )}
+              Preview
             </Button>
           ) : null}
           {completed ? (
@@ -278,6 +336,18 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
           </section>
         </aside>
       </div>
+
+      {preview ? (
+        <PreviewDialog
+          bytes={preview}
+          description={
+            completed
+              ? 'The signed PDF, as it will be downloaded.'
+              : `${signedCount} of ${document.signers.length} signed so far. Fields not yet signed are blank.`
+          }
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
 
       <AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>
         <AlertDialogContent>

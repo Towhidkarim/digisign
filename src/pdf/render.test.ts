@@ -75,6 +75,38 @@ describe('signed pdf render', () => {
     expect(Buffer.from(first).equals(Buffer.from(second))).toBe(true);
   });
 
+  it('previews without the record, the certificate or the manifest attachment', async () => {
+    const blank = await PDFDocument.create();
+    blank.addPage([200, 200]);
+    const original = await blank.save();
+    const manifest: LocalManifest = {
+      v: 1,
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      title: 'Agreement',
+      source: { sha256: 'ab'.repeat(32), size: original.length },
+      geometrySha256: 'cd'.repeat(32),
+      layoutSha256: 'ef'.repeat(32),
+      geometry: [
+        { mediaBox: [0, 0, 200, 200], cropBox: [0, 0, 200, 200], rotate: 0 },
+      ],
+      layout: {
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        layoutVersion: 1,
+        fields: [],
+      },
+      signers: [],
+      completedAt: 1_700_000_000_000,
+    };
+    const preview = await render(original, manifest, {
+      fonts,
+      verifyOrigin: 'https://digisign.test',
+      preview: { signedCount: 1, total: 2 },
+    });
+    const pdf = await PDFDocument.load(preview);
+    expect(pdf.getPageCount()).toBe(1);
+    expect(Buffer.from(preview).includes('digisign-manifest.json')).toBe(false);
+  });
+
   it('stamps drawn and typed ink with the same bytes twice', async () => {
     const blank = await PDFDocument.create();
     blank.addPage([200, 200]);

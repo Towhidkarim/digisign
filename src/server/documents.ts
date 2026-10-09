@@ -26,6 +26,7 @@ import {
   voidDocument,
 } from '#/server/domain/documents.ts';
 import { reissueInvite } from '#/server/domain/invite.ts';
+import { readDocumentPreview } from '#/server/domain/preview.ts';
 import { publishOutboxQuietly } from '#/server/engine/outbox.ts';
 import { isAppError } from '#/server/errors.ts';
 
@@ -71,6 +72,17 @@ export const getDocumentFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) =>
     settle(async () =>
       readOwnedDocument((await resolveActor()).id, data.documentId),
+    ),
+  );
+
+export const previewDocumentFn = createServerFn({ method: 'GET' })
+  .validator(documentIdSchema)
+  .handler(async ({ data }) =>
+    settle(async () =>
+      readDocumentPreview({
+        ownerId: (await resolveActor()).id,
+        documentId: data.documentId,
+      }),
     ),
   );
 

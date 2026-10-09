@@ -14,7 +14,7 @@ type Loader<P> = () => Promise<{ default: ComponentType<P> }>;
  */
 export function lazyDesk<P extends object>(
   load: Loader<P> | null,
-  fallback: ReactElement = <DeskSkeleton />,
+  fallback: ReactElement | null = <DeskSkeleton />,
 ): (props: P) => ReactElement | null {
   if (!load) return () => null;
   const Screen = lazy(load);
