@@ -2,30 +2,23 @@ import { createFileRoute, Link, redirect } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 
 import { Button } from '#/components/ui/button.tsx';
-import { AppShell } from '#/features/dashboard/app-shell.tsx';
 import { DocumentLoadError } from '#/features/dashboard/document-list.tsx';
 import { DocumentsCard } from '#/features/dashboard/documents-card.tsx';
 import { EmptyDocuments } from '#/features/dashboard/empty-state.tsx';
 import { OverviewStrip } from '#/features/dashboard/overview-strip.tsx';
-import { DeskSkeleton } from '#/features/dashboard/skeleton.tsx';
+import { DashboardPending } from '#/features/dashboard/skeleton.tsx';
 import {
   countDocuments,
   dashboardSubtitle,
   greeting,
 } from '#/features/dashboard/summary.ts';
 import { listDocumentsFn } from '#/server/documents.ts';
-import { getSessionFn } from '#/server/session.ts';
 
-function DashboardPending() {
-  return <DeskSkeleton sheet />;
-}
-
-export const Route = createFileRoute('/dashboard')({
+export const Route = createFileRoute('/_shell/dashboard')({
   ssr: false,
-  beforeLoad: async () => {
-    const session = await getSessionFn();
-    if (!session) throw redirect({ to: '/login' });
-    return session;
+  beforeLoad: ({ context }) => {
+    if (!context.session) throw redirect({ to: '/login' });
+    return { user: context.session.user };
   },
   loader: () => listDocumentsFn(),
   pendingMs: 200,
@@ -40,7 +33,7 @@ function DashboardPage() {
   const documents = Array.isArray(data) ? data : [];
   const counts = countDocuments(documents);
   return (
-    <AppShell user={user}>
+    <>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-6">
         <div className="min-w-0">
           <h1 className="text-title font-semibold tracking-tight">
@@ -71,6 +64,6 @@ function DashboardPage() {
           <DocumentsCard documents={documents} limit={6} />
         </>
       )}
-    </AppShell>
+    </>
   );
 }

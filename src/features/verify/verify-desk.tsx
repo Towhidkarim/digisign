@@ -61,7 +61,13 @@ type LastRun = {
   name: string | null;
 };
 
-export function VerifyDesk({ initialId }: { initialId?: string }) {
+export function VerifyDesk({
+  initialId,
+  signedIn = false,
+}: {
+  initialId?: string;
+  signedIn?: boolean;
+}) {
   const [typedId, setTypedId] = useState(initialId ?? '');
   const [fileName, setFileName] = useState('');
   const [fileSize, setFileSize] = useState(0);
@@ -231,7 +237,7 @@ export function VerifyDesk({ initialId }: { initialId?: string }) {
   const blocked = busy || !(hasFile || ID.test(typedId.trim()));
 
   return (
-    <VerifyLayout>
+    <VerifyLayout signedIn={signedIn}>
       {result ? (
         <ResultView
           result={result}

@@ -21,6 +21,22 @@ export function DocumentsPending() {
   );
 }
 
+/** The dashboard's content, inside the sidebar, while its document list is loading. */
+export function DashboardPending() {
+  return (
+    <div aria-busy="true">
+      <p className="sr-only">Loading your dashboard</p>
+      <Skeleton className="h-9 w-64 max-w-full" />
+      <Skeleton className="mt-2 h-4 w-56" />
+      <div className="mt-10 overflow-hidden rounded-lg border border-border bg-card px-6">
+        <Skeleton className="my-5 h-12 w-full" />
+        <Skeleton className="my-5 h-12 w-full" />
+        <Skeleton className="my-5 h-12 w-full" />
+      </div>
+    </div>
+  );
+}
+
 /** The document page, shown the moment a row is opened. */
 export function DocumentPending() {
   return (

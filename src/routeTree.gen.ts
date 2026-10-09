@@ -10,19 +10,19 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as ShellRouteImport } from './routes/_shell'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrepareRouteImport } from './routes/prepare'
 import { Route as SignRouteImport } from './routes/sign'
 import { Route as SignupRouteImport } from './routes/signup'
-import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as DotwellKnownDigisignKeysDotjsonRouteImport } from './routes/[.]well-known/digisign-keys[.]json'
+import { Route as ShellDashboardRouteImport } from './routes/_shell.dashboard'
+import { Route as ShellVerifyRouteImport } from './routes/_shell.verify'
 import { Route as DevFoundationsRouteImport } from './routes/dev/foundations'
-import { Route as DocumentsIndexRouteImport } from './routes/documents.index'
-import { Route as DocumentsDocumentIdRouteImport } from './routes/documents.$documentId'
 import { Route as STokenRouteImport } from './routes/s/$token'
 import { Route as VDocumentIdRouteImport } from './routes/v.$documentId'
+import { Route as ShellDocumentsIndexRouteImport } from './routes/_shell.documents.index'
+import { Route as ShellDocumentsDocumentIdRouteImport } from './routes/_shell.documents.$documentId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as FilesDocumentsIdSourceRouteImport } from './routes/files/documents/$id/source'
 
@@ -31,14 +31,8 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocumentsRoute = DocumentsRouteImport.update({
-  id: '/documents',
-  path: '/documents',
+const ShellRoute = ShellRouteImport.update({
+  id: '/_shell',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -61,31 +55,26 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
-const VerifyRoute = VerifyRouteImport.update({
-  id: '/verify',
-  path: '/verify',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const DotwellKnownDigisignKeysDotjsonRoute =
   DotwellKnownDigisignKeysDotjsonRouteImport.update({
     id: '/.well-known/digisign-keys.json',
     path: '/.well-known/digisign-keys.json',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ShellDashboardRoute = ShellDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellVerifyRoute = ShellVerifyRouteImport.update({
+  id: '/verify',
+  path: '/verify',
+  getParentRoute: () => ShellRoute,
+} as any)
 const DevFoundationsRoute = DevFoundationsRouteImport.update({
   id: '/dev/foundations',
   path: '/dev/foundations',
   getParentRoute: () => rootRouteImport,
-} as any)
-const DocumentsIndexRoute = DocumentsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DocumentsRoute,
-} as any)
-const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
-  id: '/$documentId',
-  path: '/$documentId',
-  getParentRoute: () => DocumentsRoute,
 } as any)
 const STokenRoute = STokenRouteImport.update({
   id: '/s/$token',
@@ -97,6 +86,17 @@ const VDocumentIdRoute = VDocumentIdRouteImport.update({
   path: '/v/$documentId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShellDocumentsIndexRoute = ShellDocumentsIndexRouteImport.update({
+  id: '/documents/',
+  path: '/documents/',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellDocumentsDocumentIdRoute =
+  ShellDocumentsDocumentIdRouteImport.update({
+    id: '/documents/$documentId',
+    path: '/documents/$documentId',
+    getParentRoute: () => ShellRoute,
+  } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -110,123 +110,119 @@ const FilesDocumentsIdSourceRoute = FilesDocumentsIdSourceRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/documents': typeof DocumentsRouteWithChildren
   '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
   '/signup': typeof SignupRoute
-  '/verify': typeof VerifyRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
+  '/dashboard': typeof ShellDashboardRoute
+  '/verify': typeof ShellVerifyRoute
   '/dev/foundations': typeof DevFoundationsRoute
-  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/s/$token': typeof STokenRoute
   '/v/$documentId': typeof VDocumentIdRoute
-  '/documents/': typeof DocumentsIndexRoute
+  '/documents/$documentId': typeof ShellDocumentsDocumentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/documents/': typeof ShellDocumentsIndexRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
   '/signup': typeof SignupRoute
-  '/verify': typeof VerifyRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
+  '/dashboard': typeof ShellDashboardRoute
+  '/verify': typeof ShellVerifyRoute
   '/dev/foundations': typeof DevFoundationsRoute
-  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/s/$token': typeof STokenRoute
   '/v/$documentId': typeof VDocumentIdRoute
-  '/documents': typeof DocumentsIndexRoute
+  '/documents/$documentId': typeof ShellDocumentsDocumentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/documents': typeof ShellDocumentsIndexRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/documents': typeof DocumentsRouteWithChildren
+  '/_shell': typeof ShellRouteWithChildren
   '/login': typeof LoginRoute
   '/prepare': typeof PrepareRoute
   '/sign': typeof SignRoute
   '/signup': typeof SignupRoute
-  '/verify': typeof VerifyRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
+  '/_shell/dashboard': typeof ShellDashboardRoute
+  '/_shell/verify': typeof ShellVerifyRoute
   '/dev/foundations': typeof DevFoundationsRoute
-  '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/s/$token': typeof STokenRoute
   '/v/$documentId': typeof VDocumentIdRoute
-  '/documents/': typeof DocumentsIndexRoute
+  '/_shell/documents/$documentId': typeof ShellDocumentsDocumentIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/_shell/documents/': typeof ShellDocumentsIndexRoute
   '/files/documents/$id/source': typeof FilesDocumentsIdSourceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/dashboard'
-    | '/documents'
     | '/login'
     | '/prepare'
     | '/sign'
     | '/signup'
-    | '/verify'
     | '/.well-known/digisign-keys.json'
+    | '/dashboard'
+    | '/verify'
     | '/dev/foundations'
-    | '/documents/$documentId'
     | '/s/$token'
     | '/v/$documentId'
-    | '/documents/'
+    | '/documents/$documentId'
     | '/api/auth/$'
+    | '/documents/'
     | '/files/documents/$id/source'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/dashboard'
     | '/login'
     | '/prepare'
     | '/sign'
     | '/signup'
-    | '/verify'
     | '/.well-known/digisign-keys.json'
+    | '/dashboard'
+    | '/verify'
     | '/dev/foundations'
-    | '/documents/$documentId'
     | '/s/$token'
     | '/v/$documentId'
-    | '/documents'
+    | '/documents/$documentId'
     | '/api/auth/$'
+    | '/documents'
     | '/files/documents/$id/source'
   id:
     | '__root__'
     | '/'
-    | '/dashboard'
-    | '/documents'
+    | '/_shell'
     | '/login'
     | '/prepare'
     | '/sign'
     | '/signup'
-    | '/verify'
     | '/.well-known/digisign-keys.json'
+    | '/_shell/dashboard'
+    | '/_shell/verify'
     | '/dev/foundations'
-    | '/documents/$documentId'
     | '/s/$token'
     | '/v/$documentId'
-    | '/documents/'
+    | '/_shell/documents/$documentId'
     | '/api/auth/$'
+    | '/_shell/documents/'
     | '/files/documents/$id/source'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardRoute: typeof DashboardRoute
-  DocumentsRoute: typeof DocumentsRouteWithChildren
+  ShellRoute: typeof ShellRouteWithChildren
   LoginRoute: typeof LoginRoute
   PrepareRoute: typeof PrepareRoute
   SignRoute: typeof SignRoute
   SignupRoute: typeof SignupRoute
-  VerifyRoute: typeof VerifyRoute
   DotwellKnownDigisignKeysDotjsonRoute: typeof DotwellKnownDigisignKeysDotjsonRoute
   DevFoundationsRoute: typeof DevFoundationsRoute
   STokenRoute: typeof STokenRoute
@@ -244,18 +240,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/documents': {
-      id: '/documents'
-      path: '/documents'
-      fullPath: '/documents'
-      preLoaderRoute: typeof DocumentsRouteImport
+    '/_shell': {
+      id: '/_shell'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof ShellRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -286,13 +275,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/verify': {
-      id: '/verify'
-      path: '/verify'
-      fullPath: '/verify'
-      preLoaderRoute: typeof VerifyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/.well-known/digisign-keys.json': {
       id: '/.well-known/digisign-keys.json'
       path: '/.well-known/digisign-keys.json'
@@ -300,26 +282,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DotwellKnownDigisignKeysDotjsonRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_shell/dashboard': {
+      id: '/_shell/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof ShellDashboardRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/verify': {
+      id: '/_shell/verify'
+      path: '/verify'
+      fullPath: '/verify'
+      preLoaderRoute: typeof ShellVerifyRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/dev/foundations': {
       id: '/dev/foundations'
       path: '/dev/foundations'
       fullPath: '/dev/foundations'
       preLoaderRoute: typeof DevFoundationsRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/documents/': {
-      id: '/documents/'
-      path: '/'
-      fullPath: '/documents/'
-      preLoaderRoute: typeof DocumentsIndexRouteImport
-      parentRoute: typeof DocumentsRoute
-    }
-    '/documents/$documentId': {
-      id: '/documents/$documentId'
-      path: '/$documentId'
-      fullPath: '/documents/$documentId'
-      preLoaderRoute: typeof DocumentsDocumentIdRouteImport
-      parentRoute: typeof DocumentsRoute
     }
     '/s/$token': {
       id: '/s/$token'
@@ -334,6 +316,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/v/$documentId'
       preLoaderRoute: typeof VDocumentIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_shell/documents/': {
+      id: '/_shell/documents/'
+      path: '/documents'
+      fullPath: '/documents/'
+      preLoaderRoute: typeof ShellDocumentsIndexRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/documents/$documentId': {
+      id: '/_shell/documents/$documentId'
+      path: '/documents/$documentId'
+      fullPath: '/documents/$documentId'
+      preLoaderRoute: typeof ShellDocumentsDocumentIdRouteImport
+      parentRoute: typeof ShellRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -352,29 +348,29 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface DocumentsRouteChildren {
-  DocumentsDocumentIdRoute: typeof DocumentsDocumentIdRoute
-  DocumentsIndexRoute: typeof DocumentsIndexRoute
+interface ShellRouteChildren {
+  ShellDashboardRoute: typeof ShellDashboardRoute
+  ShellVerifyRoute: typeof ShellVerifyRoute
+  ShellDocumentsDocumentIdRoute: typeof ShellDocumentsDocumentIdRoute
+  ShellDocumentsIndexRoute: typeof ShellDocumentsIndexRoute
 }
 
-const DocumentsRouteChildren: DocumentsRouteChildren = {
-  DocumentsDocumentIdRoute: DocumentsDocumentIdRoute,
-  DocumentsIndexRoute: DocumentsIndexRoute,
+const ShellRouteChildren: ShellRouteChildren = {
+  ShellDashboardRoute: ShellDashboardRoute,
+  ShellVerifyRoute: ShellVerifyRoute,
+  ShellDocumentsDocumentIdRoute: ShellDocumentsDocumentIdRoute,
+  ShellDocumentsIndexRoute: ShellDocumentsIndexRoute,
 }
 
-const DocumentsRouteWithChildren = DocumentsRoute._addFileChildren(
-  DocumentsRouteChildren,
-)
+const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRoute,
-  DocumentsRoute: DocumentsRouteWithChildren,
+  ShellRoute: ShellRouteWithChildren,
   LoginRoute: LoginRoute,
   PrepareRoute: PrepareRoute,
   SignRoute: SignRoute,
   SignupRoute: SignupRoute,
-  VerifyRoute: VerifyRoute,
   DotwellKnownDigisignKeysDotjsonRoute: DotwellKnownDigisignKeysDotjsonRoute,
   DevFoundationsRoute: DevFoundationsRoute,
   STokenRoute: STokenRoute,

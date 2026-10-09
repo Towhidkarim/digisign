@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { useRef } from 'react';
 
 import { DocumentDesk } from '#/features/dashboard/document-desk.tsx';
@@ -8,7 +8,10 @@ import { useDocumentPolling } from '#/features/dashboard/use-document-polling.ts
 import { getDocumentFn } from '#/server/documents.ts';
 import type { OwnedDocumentDetail } from '#/server/domain/documents.ts';
 
-export const Route = createFileRoute('/documents/$documentId')({
+export const Route = createFileRoute('/_shell/documents/$documentId')({
+  beforeLoad: ({ context }) => {
+    if (!context.session) throw redirect({ to: '/login' });
+  },
   loader: ({ params }) =>
     getDocumentFn({ data: { documentId: params.documentId } }),
   pendingMs: 0,

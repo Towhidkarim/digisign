@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, redirect } from '@tanstack/react-router';
 import { Plus } from 'lucide-react';
 
 import { Button } from '#/components/ui/button.tsx';
@@ -12,7 +12,10 @@ import {
 } from '#/features/dashboard/summary.ts';
 import { listDocumentsFn } from '#/server/documents.ts';
 
-export const Route = createFileRoute('/documents/')({
+export const Route = createFileRoute('/_shell/documents/')({
+  beforeLoad: ({ context }) => {
+    if (!context.session) throw redirect({ to: '/login' });
+  },
   loader: () => listDocumentsFn(),
   pendingMs: 200,
   pendingComponent: DocumentsPending,
