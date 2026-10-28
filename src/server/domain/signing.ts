@@ -15,6 +15,7 @@ import { sha256Hex } from '#/core/hash.ts';
 import type { InviteReason } from '#/core/invite-reason.ts';
 import { limits } from '#/core/limits.ts';
 import { currentRenderer } from '#/core/renderer.ts';
+import { isAutoKind } from '#/core/signer-rules.ts';
 import { ulid } from '#/core/ulid.ts';
 import { commitOrReplay, guardedBatch } from '#/db/guarded-batch.ts';
 import { getDb } from '#/db/index.ts';
@@ -277,9 +278,8 @@ export async function peekInvite(input: {
       (field) =>
         field.signerId === signer.id &&
         field.required &&
-        // The date and the name fill themselves in, so the signer has nothing to do for them.
-        field.kind !== 'date_signed' &&
-        field.kind !== 'full_name',
+        // The date, the name and prefilled text fill themselves in, so the signer has nothing to do.
+        !isAutoKind(field.kind),
     ).length,
     expiresAt: Math.min(
       found.token.expiresAt,
@@ -374,6 +374,7 @@ export async function submitSignature(input: {
   ) {
     throw new AppError(422, 'Complete the required fields first.');
   }
+  await checkImages(input.body.values);
   const prior = people.filter(
     (person) => person.status === 'signed' && person.evidenceSha256,
   );
@@ -981,11 +982,42 @@ export function readLayout(
   return parsed.data;
 }
 
+/**
+ * An image signature travels as base64 inside the sealed value. Before it is sealed, the bytes
+ * must really be a PNG of the stated size, and match the hash the signer's browser computed.
+ */
+async function checkImages(values: readonly FieldValue[]): Promise<void> {
+  for (const value of values) {
+    const signature = value.signature;
+    if (signature?.kind !== 'image') continue;
+    const bad = new AppError(
+      422,
+      'That image could not be used as a signature.',
+    );
+    let bytes: Uint8Array;
+    try {
+      bytes = Uint8Array.from(atob(signature.data), (c) => c.charCodeAt(0));
+    } catch {
+      throw bad;
+    }
+    // A PNG's IHDR chunk holds its width and height at bytes 16 to 23.
+    if (bytes.length < 24) throw bad;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (
+      view.getUint32(16) !== signature.w ||
+      view.getUint32(20) !== signature.h ||
+      (await sha256Hex(bytes)) !== signature.sha256
+    ) {
+      throw bad;
+    }
+  }
+}
+
 function answerReady(
   field: FieldInput,
   values: readonly FieldValue[],
 ): boolean {
-  if (field.kind === 'date_signed' || field.kind === 'full_name') return true;
+  if (isAutoKind(field.kind)) return true;
   const value = values.find((item) => item.fieldId === field.id);
   if (!value) return false;
   if (field.kind === 'signature' || field.kind === 'initials')
@@ -1006,6 +1038,10 @@ function completeValues(
       return [{ fieldId: field.id, text: formatSignedAt(signedAt) }];
     if (field.kind === 'full_name')
       return [{ fieldId: field.id, text: signerName || 'Signer' }];
+    if (field.kind === 'prefilled_text') {
+      const text = (field.prefill ?? '').trim();
+      return text ? [{ fieldId: field.id, text }] : [];
+    }
     if (!given) return [];
     if (field.kind === 'checkbox')
       return [{ fieldId: field.id, checked: given.checked === true }];

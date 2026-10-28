@@ -1,5 +1,9 @@
 import type { FieldInput } from '#/core/contracts/index.ts';
-import { checkSigners, countIssues } from '#/core/signer-rules.ts';
+import {
+  checkSigners,
+  countIssues,
+  emptyPrefills,
+} from '#/core/signer-rules.ts';
 
 export type NamedSigner = { id: string; name: string; email: string };
 
@@ -54,6 +58,14 @@ export function problemList(
       lines.push(`${name} needs a signature or initials field`);
     }
   });
+  const empty = emptyPrefills(fields);
+  if (empty > 0) {
+    lines.push(
+      empty === 1
+        ? '1 prefilled text field is empty'
+        : `${empty} prefilled text fields are empty`,
+    );
+  }
   return lines;
 }
 
@@ -62,5 +74,5 @@ export function countProblems(
   signers: readonly { id: string; name: string; email: string }[],
   fields: readonly FieldInput[],
 ): number {
-  return countIssues(checkSigners(signers, fields));
+  return countIssues(checkSigners(signers, fields)) + emptyPrefills(fields);
 }

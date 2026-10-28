@@ -53,6 +53,8 @@ export async function inviteNextSigner(input: {
   const tokenHash = await secretHash(token);
   const opId = ulid();
   const outboxId = ulid();
+  // No address, or sent by link: nobody is mailed and the owner shares the link themselves.
+  const byLink = document.delivery === 'link' || !next.email;
   const audit = await planAudit({
     documentId: input.documentId,
     type: 'signer.invited',
@@ -95,21 +97,26 @@ export async function inviteNextSigner(input: {
             createdAt: now,
           }),
           insertAudit(audit),
-          outboxInsert({
-            id: outboxId,
-            type: 'send_email',
-            documentId: input.documentId,
-            payload: {
-              template: 'invite',
-              to: next.email,
-              name: next.name,
-              title: document.title,
-              signerId: next.id,
-              token,
-              origin: input.origin,
-            },
-            now,
-          }),
+          // Sent by link, nobody is mailed: the owner copies the link from the document page.
+          ...(byLink
+            ? []
+            : [
+                outboxInsert({
+                  id: outboxId,
+                  type: 'send_email',
+                  documentId: input.documentId,
+                  payload: {
+                    template: 'invite',
+                    to: next.email,
+                    name: next.name,
+                    title: document.title,
+                    signerId: next.id,
+                    token,
+                    origin: input.origin,
+                  },
+                  now,
+                }),
+              ]),
         ],
       }),
   });
@@ -159,6 +166,7 @@ export async function reissueSignerLink(input: {
   const opId = ulid();
   const outboxId = ulid();
   const byOwner = input.ownerId != null;
+  const byLink = document.delivery === 'link' || signer.isSelf || !signer.email;
   const audit = await planAudit({
     documentId: document.id,
     type: 'signer.invited',
@@ -210,21 +218,25 @@ export async function reissueSignerLink(input: {
             createdAt: now,
           }),
           insertAudit(audit),
-          outboxInsert({
-            id: outboxId,
-            type: 'send_email',
-            documentId: document.id,
-            payload: {
-              template: input.template,
-              to: signer.email,
-              name: signer.name,
-              title: document.title,
-              signerId: signer.id,
-              token,
-              origin: input.origin,
-            },
-            now,
-          }),
+          ...(byLink
+            ? []
+            : [
+                outboxInsert({
+                  id: outboxId,
+                  type: 'send_email',
+                  documentId: document.id,
+                  payload: {
+                    template: input.template,
+                    to: signer.email,
+                    name: signer.name,
+                    title: document.title,
+                    signerId: signer.id,
+                    token,
+                    origin: input.origin,
+                  },
+                  now,
+                }),
+              ]),
         ],
       }),
   });
@@ -251,4 +263,26 @@ export async function reissueInvite(input: {
     documentId: signer?.documentId ?? '',
     token: issued.token,
   };
+}
+
+/**
+ * A fresh signing link for the owner's own signer, so they can sign from the app. Nothing is
+ * mailed. Like any new link it turns off the one that existed.
+ */
+export async function startOwnSigning(input: {
+  ownerId: string;
+  signerId: string;
+  origin: string;
+  now?: number;
+}): Promise<{ token: string }> {
+  const [signer] = await getDb()
+    .select({ isSelf: signers.isSelf })
+    .from(signers)
+    .where(eq(signers.id, input.signerId))
+    .limit(1);
+  if (!signer?.isSelf) {
+    throw new AppError(409, 'That signer is not you.');
+  }
+  const issued = await reissueSignerLink({ ...input, template: 'invite' });
+  return { token: issued.token };
 }

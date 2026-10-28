@@ -312,7 +312,12 @@ async function notifyParties(
     return 'done';
   }
   if (payload.status === 'reminder') {
-    if (payload.signerId && document.status === 'in_progress') {
+    // A reminder swaps the signer's link. Sent by link, that would kill the link the owner shared.
+    if (
+      payload.signerId &&
+      document.status === 'in_progress' &&
+      document.delivery !== 'link'
+    ) {
       try {
         await reissueSignerLink({
           signerId: payload.signerId,
@@ -345,6 +350,7 @@ async function notifyParties(
   if (owner)
     recipients.push({ key: 'owner', to: owner.email, name: owner.name });
   for (const person of people) {
+    if (document.delivery === 'link' || person.isSelf) continue;
     if (person.invitedAt == null || !person.email) continue;
     if (person.status === 'declined') continue;
     recipients.push({ key: person.id, to: person.email, name: person.name });

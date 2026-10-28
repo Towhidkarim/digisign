@@ -133,8 +133,9 @@ function plural(count: number, word: string): string {
 
 /** The one line under a document title: who it is waiting on, or what happened. */
 export function metaLine(document: OwnedDocument): string {
-  const { status, signers, signed, waitingOn } = document;
+  const { status, signers, signed, waitingOn, youToSign } = document;
   if (status === 'in_progress') {
+    if (youToSign) return 'Waiting on you to sign';
     return waitingOn
       ? `Waiting on ${waitingOn}`
       : `${signed} of ${signers} signed`;

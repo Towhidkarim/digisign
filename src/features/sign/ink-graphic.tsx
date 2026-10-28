@@ -53,6 +53,9 @@ export function InkGraphic({
       </svg>
     );
   }
+  if (value.signature?.kind === 'image') {
+    return <StampImage signature={value.signature} />;
+  }
   if (value.signature?.kind === 'typed') {
     return (
       <FittedScript
@@ -90,6 +93,25 @@ export function InkGraphic({
   return null;
 }
 
+/** A stamp or image signature, fitted inside its box with its proportions kept. */
+function StampImage({
+  signature,
+  className,
+}: {
+  signature: Extract<SignatureInput, { kind: 'image' }>;
+  className?: string;
+}) {
+  return (
+    <img
+      src={`data:${signature.mime};base64,${signature.data}`}
+      width={signature.w}
+      height={signature.h}
+      alt="Your signature"
+      className={`h-full w-full object-contain ${className ?? ''}`}
+    />
+  );
+}
+
 /** A captured signature on its own, for the summaries and the saved-signature tab. */
 export function SignatureImage({
   signature,
@@ -98,6 +120,9 @@ export function SignatureImage({
   signature: SignatureInput;
   className?: string;
 }) {
+  if (signature.kind === 'image') {
+    return <StampImage signature={signature} className={className} />;
+  }
   if (signature.kind === 'typed') {
     return (
       <span className={`relative block ${className ?? ''}`}>

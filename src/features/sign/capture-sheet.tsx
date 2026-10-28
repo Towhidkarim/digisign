@@ -25,17 +25,24 @@ import {
   unpackStrokes,
 } from '#/features/sign/capture.ts';
 import { FittedScript } from '#/features/sign/fitted-script.tsx';
+import {
+  type ImageSignature,
+  prepareImageSignature,
+} from '#/features/sign/image-signature.ts';
 import { SignatureImage } from '#/features/sign/ink-graphic.tsx';
 import {
+  forgetOnAccount,
   forgetSignature,
+  loadAccountSignature,
   loadSavedSignature,
+  rememberOnAccount,
   rememberSignature,
 } from '#/features/sign/saved-signature.ts';
 import { useMediaQuery } from '#/hooks/use-media-query.ts';
 import { cn } from '#/lib/utils.ts';
 import { installScriptFaces, SCRIPT_FACE } from '#/pdf/fonts.ts';
 
-type Mode = 'drawn' | 'typed' | 'saved';
+type Mode = 'drawn' | 'typed' | 'image' | 'saved';
 
 /** The pen follows the pad's text colour, which stays dark ink on white paper in either theme. */
 function ink(frame: HTMLElement): string {
@@ -59,9 +66,20 @@ export function CaptureSheet({
   /** Lets the page put focus back on the exact field that opened the sheet. */
   onCloseAutoFocus?: (event: Event) => void;
 }) {
-  const [saved] = useState<SignatureInput | null>(() => loadSavedSignature());
+  const [saved, setSaved] = useState<SignatureInput | null>(() =>
+    loadSavedSignature(),
+  );
+  /** Signed in: "remember" keeps it on the account. Otherwise it stays in this browser. */
+  const [signedIn, setSignedIn] = useState(false);
   const [mode, setMode] = useState<Mode>(
-    existing?.kind === 'typed' ? 'typed' : 'drawn',
+    existing?.kind === 'typed'
+      ? 'typed'
+      : existing?.kind === 'image'
+        ? 'image'
+        : 'drawn',
+  );
+  const [image, setImage] = useState<ImageSignature | null>(
+    existing?.kind === 'image' ? existing : null,
   );
   const [typed, setTyped] = useState(
     existing?.kind === 'typed' ? existing.text : '',
@@ -80,6 +98,19 @@ export function CaptureSheet({
 
   useEffect(() => {
     let cancelled = false;
+    void loadAccountSignature().then((account) => {
+      if (cancelled) return;
+      setSignedIn(account.signedIn);
+      // The account's copy wins over whatever this browser kept.
+      if (account.signature) setSaved(account.signature);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
     void installScriptFaces().then(() => {
       if (!cancelled) setFontsReady(true);
     });
@@ -93,7 +124,9 @@ export function CaptureSheet({
       ? drawn !== null
       : mode === 'typed'
         ? typed.trim().length > 0
-        : hasSaved;
+        : mode === 'image'
+          ? image !== null
+          : hasSaved;
 
   function candidate(): SignatureInput | null {
     if (mode === 'drawn') {
@@ -108,6 +141,7 @@ export function CaptureSheet({
     if (mode === 'typed') {
       return typed.trim() ? typedSignature(typed, font) : null;
     }
+    if (mode === 'image') return image;
     return hasSaved ? saved : null;
   }
 
@@ -119,7 +153,9 @@ export function CaptureSheet({
           ? 'Draw a signature first.'
           : mode === 'typed'
             ? 'Type your name first.'
-            : 'There is no saved signature.',
+            : mode === 'image'
+              ? 'Choose an image first.'
+              : 'There is no saved signature.',
       );
       return;
     }
@@ -130,7 +166,15 @@ export function CaptureSheet({
       );
       return;
     }
-    if (remember && mode !== 'saved') rememberSignature(checked.data);
+    if (remember && mode !== 'saved') {
+      const kept = checked.data;
+      // Signed in, it goes to the account. Anything else, or a failed save, stays in this browser.
+      void (signedIn ? rememberOnAccount(kept) : Promise.resolve(false)).then(
+        (onAccount) => {
+          if (!onAccount) rememberSignature(kept);
+        },
+      );
+    }
     onUse(checked.data);
   }
 
@@ -163,6 +207,7 @@ export function CaptureSheet({
               [
                 ['drawn', 'Draw'],
                 ['typed', 'Type'],
+                ['image', 'Image'],
                 ...(hasSaved ? [['saved', 'Saved']] : []),
               ] as [Mode, string][]
             ).map(([value, label]) => (
@@ -198,6 +243,16 @@ export function CaptureSheet({
               onFont={setFont}
             />
           </TabsContent>
+          <TabsContent value="image" className="mt-3">
+            <ImagePad
+              image={image}
+              onImage={(next) => {
+                setImage(next);
+                setError('');
+              }}
+              onError={setError}
+            />
+          </TabsContent>
           {saved ? (
             <TabsContent value="saved" className="mt-3">
               <div className="flex flex-col gap-3">
@@ -209,6 +264,7 @@ export function CaptureSheet({
                   className="self-start text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground max-sm:min-h-11"
                   onClick={() => {
                     forgetSignature();
+                    if (signedIn) void forgetOnAccount();
                     setSavedGone(true);
                     setMode('drawn');
                   }}
@@ -229,9 +285,11 @@ export function CaptureSheet({
               onChange={(event) => setRemember(event.target.checked)}
             />
             <span>
-              Remember on this device
+              {signedIn ? 'Save to my account' : 'Remember on this device'}
               <span className="block text-small text-muted-foreground">
-                Kept only in this browser. You can remove it any time.
+                {signedIn
+                  ? 'Available whenever you sign in. You can remove it any time.'
+                  : 'Kept only in this browser. You can remove it any time.'}
               </span>
             </span>
           </label>
@@ -253,6 +311,66 @@ export function CaptureSheet({
         </Button>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ImagePad({
+  image,
+  onImage,
+  onError,
+}: {
+  image: ImageSignature | null;
+  onImage: (image: ImageSignature | null) => void;
+  onError: (message: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  async function choose(file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    try {
+      onImage(await prepareImageSignature(file));
+    } catch (caught) {
+      onImage(null);
+      onError(
+        caught instanceof Error
+          ? caught.message
+          : 'That image could not be used.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="on-paper flex aspect-3/1 w-full items-center justify-center overflow-hidden rounded-lg border border-input bg-card p-3 text-foreground">
+        {image ? (
+          <SignatureImage signature={image} className="h-full w-full" />
+        ) : (
+          <p className="text-center text-small text-muted-foreground">
+            {busy
+              ? 'Preparing your image...'
+              : 'Upload a picture of your signature or a stamp.'}
+          </p>
+        )}
+      </div>
+      <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-input px-4 text-sm font-medium hover:bg-muted focus-within:ring-[3px] focus-within:ring-ring/50">
+        {image ? 'Choose a different image' : 'Choose an image'}
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="sr-only"
+          aria-label="Choose an image"
+          onChange={(event) => {
+            void choose(event.target.files?.[0]);
+            event.target.value = '';
+          }}
+        />
+      </label>
+      <p className="text-small text-muted-foreground">
+        PNG, JPEG or WebP. A clear background works best. The picture is shrunk
+        on your device before it is used.
+      </p>
+    </div>
   );
 }
 

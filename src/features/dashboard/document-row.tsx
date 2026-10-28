@@ -9,6 +9,7 @@ import {
   formatWhen,
   metaLine,
 } from '#/features/dashboard/format.ts';
+import { SignNowButton } from '#/features/dashboard/sign-now.tsx';
 import { cn } from '#/lib/utils.ts';
 import type { OwnedDocument } from '#/server/domain/documents.ts';
 
@@ -107,9 +108,21 @@ export function DocumentRow({ document }: { document: OwnedDocument }) {
         {status === 'draft' ? (
           <ContinueEditing id={document.id} className="mt-3 md:hidden" />
         ) : null}
+        {document.youToSign ? (
+          <SignNowButton
+            signerId={document.youToSign}
+            className="mt-3 md:hidden"
+          />
+        ) : null}
       </div>
       {status === 'draft' ? (
         <ContinueEditing id={document.id} className="hidden md:inline-flex" />
+      ) : null}
+      {document.youToSign ? (
+        <SignNowButton
+          signerId={document.youToSign}
+          className="hidden md:inline-flex"
+        />
       ) : null}
       <div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">
         <StatusBadge status={status} />

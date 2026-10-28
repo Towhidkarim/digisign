@@ -1,6 +1,8 @@
 import type { OwnedDocument } from '#/server/domain/documents.ts';
 
 export type DashboardCounts = {
+  /** Documents where it is the owner's own turn to sign. */
+  you: number;
   out: number;
   drafts: number;
   completed: number;
@@ -9,6 +11,7 @@ export type DashboardCounts = {
 
 export type DocumentFilter =
   | 'all'
+  | 'you'
   | 'out'
   | 'drafts'
   | 'completed'
@@ -21,6 +24,8 @@ export function matchesFilter(
   switch (filter) {
     case 'all':
       return true;
+    case 'you':
+      return document.youToSign !== null;
     case 'out':
       return document.status === 'in_progress';
     case 'drafts':
@@ -38,6 +43,7 @@ export function countDocuments(
   const count = (filter: DocumentFilter) =>
     documents.filter((document) => matchesFilter(document, filter)).length;
   return {
+    you: count('you'),
     out: count('out'),
     drafts: count('drafts'),
     completed: count('completed'),
@@ -58,6 +64,9 @@ export function dashboardSubtitle(
 ): string {
   if (total === 0) return 'Create your first document to get started.';
   const parts = [
+    counts.you > 0
+      ? `${counts.you} ${counts.you === 1 ? 'document is' : 'documents are'} waiting for your signature.`
+      : '',
     counts.out > 0
       ? `${counts.out} ${counts.out === 1 ? 'document is' : 'documents are'} out for signature.`
       : '',

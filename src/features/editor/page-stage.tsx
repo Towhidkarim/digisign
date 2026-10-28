@@ -19,6 +19,7 @@ import {
   pointerToMicro,
   viewSize,
 } from '#/core/coords.ts';
+import { limits } from '#/core/limits.ts';
 import { setFieldGrabCursor } from '#/features/editor/desk-drag.tsx';
 import {
   type EditorAction,
@@ -343,7 +344,13 @@ function FieldBox({
   const color = signer?.color ?? 'var(--signer-6)';
   const label = FIELD_LABEL[field.kind];
   const name = signer?.name.trim() || 'Signer';
-  const caption = field.kind === 'full_name' ? name : label;
+  const caption =
+    field.kind === 'full_name'
+      ? name
+      : field.kind === 'prefilled_text'
+        ? field.prefill?.trim() ||
+          (field.label ? `[${field.label}]` : '[Prefilled text]')
+        : label;
 
   function pageBox(target: EventTarget | null): HTMLElement | null {
     if (!(target instanceof Element)) return null;
@@ -451,6 +458,9 @@ function FieldBox({
           className={`absolute left-1/2 z-20 flex -translate-x-1/2 items-center rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-md ${toolbarAbove ? 'bottom-full mb-3' : 'top-full mt-3'}`}
           onPointerDown={(event) => event.stopPropagation()}
         >
+          {field.kind === 'prefilled_text' ? (
+            <PrefillInputs field={field} dispatch={dispatch} />
+          ) : null}
           <label
             htmlFor={`required-${field.id}`}
             className="flex min-h-8 cursor-pointer items-center gap-2 px-2"
@@ -540,6 +550,46 @@ function FieldBox({
           ))
         : null}
     </div>
+  );
+}
+
+function PrefillInputs({
+  field,
+  dispatch,
+}: {
+  field: FieldInput;
+  dispatch: Dispatch<EditorAction>;
+}) {
+  const input =
+    'h-8 w-40 rounded-md border border-input bg-card px-2 text-xs text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+  function change(next: { label?: string; prefill?: string }) {
+    dispatch({
+      type: 'set-field-text',
+      id: field.id,
+      label: next.label ?? field.label ?? '',
+      prefill: next.prefill ?? field.prefill ?? '',
+    });
+  }
+  return (
+    <>
+      <input
+        aria-label="Field name, for the template form"
+        placeholder="Name, e.g. Client"
+        value={field.label ?? ''}
+        maxLength={limits.fieldLabelChars}
+        className={`${input} mr-1`}
+        onChange={(event) => change({ label: event.target.value })}
+      />
+      <input
+        aria-label="Text to print on the document"
+        placeholder="Text on the document"
+        value={field.prefill ?? ''}
+        maxLength={limits.textFieldChars}
+        className={input}
+        onChange={(event) => change({ prefill: event.target.value })}
+      />
+      <span aria-hidden className="mx-1 h-4 w-px bg-border" />
+    </>
   );
 }
 

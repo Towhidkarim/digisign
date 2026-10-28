@@ -1,5 +1,11 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { FileText, LayoutDashboard, LogOut, ShieldCheck } from 'lucide-react';
+import {
+  FileStack,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  ShieldCheck,
+} from 'lucide-react';
 
 import { Logo } from '#/components/logo.tsx';
 import { ThemeToggle } from '#/components/theme-toggle.tsx';
@@ -21,6 +27,7 @@ import { authClient } from '#/lib/auth-client.ts';
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/documents', label: 'Documents', icon: FileText },
+  { to: '/templates', label: 'Templates', icon: FileStack },
   { to: '/verify', label: 'Check a PDF', icon: ShieldCheck },
 ] as const;
 

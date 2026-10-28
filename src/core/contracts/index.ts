@@ -61,6 +61,7 @@ export const fieldKindSchema = z.enum([
   'full_name',
   'text',
   'checkbox',
+  'prefilled_text',
 ]);
 
 export const fieldInputSchema = z
@@ -78,6 +79,10 @@ export const fieldInputSchema = z
     w: microExtent,
     h: microExtent,
     required: z.boolean(),
+    /** Prefilled text only: what the field is for, shown to whoever fills it in. */
+    label: z.string().max(limits.fieldLabelChars).optional(),
+    /** Prefilled text only: the words the sender wrote in. They are stamped when this signer signs. */
+    prefill: z.string().max(limits.textFieldChars).optional(),
   })
   .refine(
     (field) =>
@@ -93,6 +98,9 @@ export const saveLayoutInputSchema = z.strictObject({
   fields: z.array(fieldInputSchema).max(limits.fieldsPerDocument),
 });
 
+/** A PNG always starts with these eight bytes, which is `iVBORw0KGgo` in base64. */
+const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]+={0,2}$/;
+
 export const signatureInputSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('drawn'),
@@ -106,6 +114,19 @@ export const signatureInputSchema = z.discriminatedUnion('kind', [
         ctx.addIssue({ code: 'custom', message: error });
       }
     }),
+  }),
+  z.strictObject({
+    kind: z.literal('image'),
+    mime: z.literal('image/png'),
+    w: z.number().int().positive().max(limits.imageMaxPx.w),
+    h: z.number().int().positive().max(limits.imageMaxPx.h),
+    /** Base64 of the PNG. Sealed with the rest of the signature, so it is covered by the hashes. */
+    data: z
+      .string()
+      .max(limits.imageBase64MaxChars)
+      .regex(PNG_BASE64, 'That image is not a PNG.'),
+    /** SHA-256 of the PNG bytes. The server recomputes it. */
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
   }),
   z.strictObject({
     kind: z.literal('typed'),

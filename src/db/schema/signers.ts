@@ -15,6 +15,8 @@ export const signers = sqliteTable(
     signingOrder: integer('signing_order', { mode: 'number' }).notNull(),
     email: text().notNull().default(''),
     name: text().notNull(),
+    /** The owner signing their own document. They sign from the app, not from a mailed link. */
+    isSelf: integer('is_self', { mode: 'boolean' }).notNull().default(false),
     status: text().notNull().default('pending'),
     invitedAt: integer('invited_at', { mode: 'number' }),
     firstViewedAt: integer('first_viewed_at', { mode: 'number' }),

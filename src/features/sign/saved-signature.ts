@@ -3,6 +3,12 @@ import {
   signatureInputSchema,
 } from '#/core/contracts/index.ts';
 
+import {
+  forgetSavedSignatureFn,
+  getSavedSignatureFn,
+  saveSignatureFn,
+} from '#/server/saved-signature.ts';
+
 const STORAGE_KEY = 'digisign.signature.v1';
 
 export function readSavedSignature(raw: string | null): SignatureInput | null {
@@ -39,4 +45,38 @@ export function rememberSignature(signature: SignatureInput): void {
 export function forgetSignature(): void {
   if (typeof localStorage === 'undefined') return;
   localStorage.removeItem(STORAGE_KEY);
+}
+
+/**
+ * The account's kept signature. `signedIn` says where "remember" should go: to the account when
+ * someone is signed in, to this browser when not. Any failure counts as not signed in.
+ */
+export async function loadAccountSignature(): Promise<{
+  signedIn: boolean;
+  signature: SignatureInput | null;
+}> {
+  try {
+    return await getSavedSignatureFn();
+  } catch {
+    return { signedIn: false, signature: null };
+  }
+}
+
+/** True when it reached the account. False means nobody is signed in or the call failed. */
+export async function rememberOnAccount(
+  signature: SignatureInput,
+): Promise<boolean> {
+  try {
+    return (await saveSignatureFn({ data: { signature } })).saved;
+  } catch {
+    return false;
+  }
+}
+
+export async function forgetOnAccount(): Promise<void> {
+  try {
+    await forgetSavedSignatureFn();
+  } catch {
+    // Nothing to undo: the local copy is already gone.
+  }
 }

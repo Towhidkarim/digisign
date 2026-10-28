@@ -31,7 +31,11 @@ import {
 } from '#/components/ui/dropdown-menu.tsx';
 import type { FieldInput } from '#/core/contracts/index.ts';
 import { limits } from '#/core/limits.ts';
-import { countIssues, type SignerCheck } from '#/core/signer-rules.ts';
+import {
+  countIssues,
+  type Delivery,
+  type SignerCheck,
+} from '#/core/signer-rules.ts';
 import { ulid } from '#/core/ulid.ts';
 import { displayTitle } from '#/features/dashboard/format.ts';
 import {
@@ -47,6 +51,7 @@ import '#/pdf/setup.ts';
 
 /** The phone header: close, file name with save status and step, and a menu. */
 export function MobileHeader({
+  template = false,
   fileName,
   saveText,
   saveError,
@@ -55,6 +60,7 @@ export function MobileHeader({
   onReplace,
   onRename,
 }: {
+  template?: boolean;
   fileName: string;
   onRename: (title: string) => Promise<string | null>;
   saveText: string;
@@ -83,7 +89,8 @@ export function MobileHeader({
             saveError ? 'text-destructive' : 'text-muted-foreground',
           )}
         >
-          {saveText ? `${saveText} · ` : ''}Step 2 of 3
+          {saveText ? `${saveText} · ` : ''}
+          {template ? 'Template' : 'Step 2 of 3'}
         </p>
       </div>
       <DropdownMenu>
@@ -175,6 +182,9 @@ function checklist(
  * signers and send a draft whose fields were placed on a larger screen.
  */
 export function MobileReview({
+  template = false,
+  delivery = 'email',
+  onChooseDelivery,
   file,
   fileName,
   pageCount,
@@ -187,6 +197,11 @@ export function MobileReview({
   dispatch,
   onReview,
 }: {
+  /** Editing a template: signer emails are optional and the button saves and leaves. */
+  template?: boolean;
+  /** How the signers are reached. 'link' needs no email addresses. */
+  delivery?: Delivery;
+  onChooseDelivery?: (delivery: Delivery) => void;
   file: Blob;
   fileName: string;
   pageCount: number;
@@ -199,7 +214,7 @@ export function MobileReview({
   dispatch: Dispatch<EditorAction>;
   onReview: () => void;
 }) {
-  const problems = countIssues(checks);
+  const problems = template ? 0 : countIssues(checks);
   const blocked = problems > 0;
   const items = checklist(signers, checks);
   return (
@@ -284,40 +299,42 @@ export function MobileReview({
           Add a signer
         </Button>
 
-        <section
-          aria-labelledby="before-you-send"
-          className="mt-6 rounded-lg border border-border bg-card p-5"
-        >
-          <h2 id="before-you-send" className="text-heading font-semibold">
-            Before you send
-          </h2>
-          <ul className="mt-3 flex flex-col gap-3">
-            {items.map((item) => (
-              <li
-                key={item.text}
-                className={cn(
-                  'flex items-start gap-3 text-sm',
-                  item.ok ? 'text-success-fg' : 'text-danger-fg',
-                )}
-              >
-                {item.ok ? (
-                  <CircleCheck
-                    aria-hidden="true"
-                    className="mt-0.5 size-5 shrink-0"
-                    strokeWidth={1.75}
-                  />
-                ) : (
-                  <TriangleAlert
-                    aria-hidden="true"
-                    className="mt-0.5 size-5 shrink-0"
-                    strokeWidth={1.75}
-                  />
-                )}
-                <span>{item.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {template ? null : (
+          <section
+            aria-labelledby="before-you-send"
+            className="mt-6 rounded-lg border border-border bg-card p-5"
+          >
+            <h2 id="before-you-send" className="text-heading font-semibold">
+              Before you send
+            </h2>
+            <ul className="mt-3 flex flex-col gap-3">
+              {items.map((item) => (
+                <li
+                  key={item.text}
+                  className={cn(
+                    'flex items-start gap-3 text-sm',
+                    item.ok ? 'text-success-fg' : 'text-danger-fg',
+                  )}
+                >
+                  {item.ok ? (
+                    <CircleCheck
+                      aria-hidden="true"
+                      className="mt-0.5 size-5 shrink-0"
+                      strokeWidth={1.75}
+                    />
+                  ) : (
+                    <TriangleAlert
+                      aria-hidden="true"
+                      className="mt-0.5 size-5 shrink-0"
+                      strokeWidth={1.75}
+                    />
+                  )}
+                  <span>{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
 
       <div className="shrink-0 border-t border-border bg-card px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
@@ -328,9 +345,11 @@ export function MobileReview({
             blocked ? 'text-warning-fg' : 'text-success-fg',
           )}
         >
-          {blocked
-            ? `Fix ${plural(problems, 'thing')} to send this document.`
-            : 'Everything is in place.'}
+          {template
+            ? 'Changes are saved as you go.'
+            : blocked
+              ? `Fix ${plural(problems, 'thing')} to send this document.`
+              : 'Everything is in place.'}
         </p>
         <Button
           type="button"
@@ -346,8 +365,28 @@ export function MobileReview({
             onReview();
           }}
         >
-          {sending ? 'Sending…' : 'Review and send'}
+          {template
+            ? 'Save and exit'
+            : sending
+              ? 'Sending…'
+              : delivery === 'link'
+                ? 'Review and send via link'
+                : 'Review and send'}
         </Button>
+        {template || !onChooseDelivery ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            className="mt-2 h-11 w-full"
+            onClick={() =>
+              onChooseDelivery(delivery === 'link' ? 'email' : 'link')
+            }
+          >
+            {delivery === 'link'
+              ? 'Send by email instead'
+              : 'Send via link instead, no emails'}
+          </Button>
+        )}
       </div>
     </div>
   );

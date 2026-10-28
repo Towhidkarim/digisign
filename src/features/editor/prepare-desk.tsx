@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '#/components/ui/alert-dialog.tsx';
+import { Button } from '#/components/ui/button.tsx';
 import {
   Sheet,
   SheetContent,
@@ -28,7 +29,11 @@ import {
   SheetTitle,
 } from '#/components/ui/sheet.tsx';
 import { type FieldKind, limits } from '#/core/limits.ts';
-import { checkSigners } from '#/core/signer-rules.ts';
+import {
+  checkSigners,
+  type Delivery,
+  emptyPrefills,
+} from '#/core/signer-rules.ts';
 import { ulid } from '#/core/ulid.ts';
 import { displayTitle } from '#/features/dashboard/format.ts';
 import { DeskDrag } from '#/features/editor/desk-drag.tsx';
@@ -40,6 +45,7 @@ import {
   initUpload,
   loadServerDraft,
   publishDocument,
+  reissueInvite,
   renameDocument,
   resumeServerDraft,
   saveLayout,
@@ -79,8 +85,13 @@ export function PrepareDesk() {
     from: '/prepare',
     select: (search) => search.documentId,
   });
+  const requestedKind = useSearch({
+    from: '/prepare',
+    select: (search) => search.kind,
+  });
   const [over, setOver] = useState(false);
   const [session, setSession] = useState<Draft>({
+    kind: 'document',
     fileName: '',
     bytes: null,
     upload: null,
@@ -153,7 +164,11 @@ export function PrepareDesk() {
         throw new PdfLoadError(pdfMessages.tooBig);
       }
       const bytes = new Uint8Array(await file.arrayBuffer());
-      await initUpload({ name: file.name, bytes }, setStep);
+      await initUpload(
+        { name: file.name, bytes },
+        setStep,
+        requestedKind === 'template' ? 'template' : 'document',
+      );
       setSession({ ...getDraft() });
     } catch (caught) {
       setError(
@@ -165,6 +180,10 @@ export function PrepareDesk() {
   }
 
   const ready = session.upload !== null && session.bytes !== null;
+  const template =
+    session.upload !== null
+      ? session.kind === 'template'
+      : requestedKind === 'template';
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -184,6 +203,7 @@ export function PrepareDesk() {
       {ready && session.upload && session.bytes ? (
         <Editor
           key={session.upload.documentId}
+          template={template}
           fileName={session.fileName}
           bytes={session.bytes}
           upload={session.upload}
@@ -201,9 +221,13 @@ export function PrepareDesk() {
           picked={picked}
           over={over}
           error={error}
+          template={template}
           needsFile={session.upload !== null && !session.bytes}
           resume={
-            resume?.upload && resume.bytes && !requestedId
+            resume?.upload &&
+            resume.bytes &&
+            !requestedId &&
+            (resume.kind === 'template') === template
               ? { title: displayTitle(resume.fileName) || 'Draft' }
               : null
           }
@@ -240,7 +264,73 @@ export function PrepareDesk() {
   );
 }
 
+/** The first signer's link after a send-by-link, ready to copy. */
+function ShareLink({
+  link,
+  note,
+}: {
+  link: { name: string; url: string } | null;
+  note: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  if (!link) {
+    return (
+      <output className="block text-sm text-muted-foreground">
+        {note || 'Getting the signing link…'}
+      </output>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <label
+        htmlFor="share-link"
+        className="text-sm font-medium text-foreground"
+      >
+        {link.name}'s signing link
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="share-link"
+          readOnly
+          value={link.url}
+          onFocus={(event) => event.currentTarget.select()}
+          className="h-10 min-w-0 flex-1 rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(link.url)
+              .then(() => setCopied(true))
+              .catch(() => setCopied(false));
+          }}
+        >
+          {copied ? 'Copied' : 'Copy link'}
+        </Button>
+      </div>
+      <p className="text-small text-muted-foreground">
+        Anyone with this link can sign as {link.name}. Later signers' links
+        appear on the document page when it is their turn.
+      </p>
+    </div>
+  );
+}
+
+/** The "Saving…" / "Draft saved" line under the title. */
+function saveLabel(state: SaveState, sent: boolean, template: boolean): string {
+  if (sent) return '';
+  const noun = template ? 'Template' : 'Draft';
+  if (state === 'saving')
+    return template ? 'Saving template…' : 'Saving draft…';
+  if (state === 'saved') return `${noun} saved`;
+  if (state === 'error') return `${noun} not saved`;
+  return '';
+}
+
 function Editor({
+  template,
   fileName: savedFileName,
   bytes,
   upload,
@@ -249,6 +339,8 @@ function Editor({
   onReplace,
   viewError,
 }: {
+  /** Editing a template: nothing here is sent, and signer emails are optional. */
+  template: boolean;
   fileName: string;
   bytes: Uint8Array;
   upload: NonNullable<Draft['upload']>;
@@ -289,6 +381,12 @@ function Editor({
   const [sent, setSent] = useState(false);
   const [sentOpen, setSentOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [delivery, setDelivery] = useState<Delivery>('email');
+  const [shareLink, setShareLink] = useState<{
+    name: string;
+    url: string;
+  } | null>(null);
+  const [linkNote, setLinkNote] = useState('');
   // Phone: a review screen with no stage. Tablet: the stage plus a signer drawer. Desktop: both.
   const phone = useMediaQuery('(max-width: 767px)');
   const desktop = useMediaQuery('(min-width: 1024px)');
@@ -431,6 +529,10 @@ function Editor({
         return;
       }
     }
+    if (template) {
+      await navigate({ to: '/templates' });
+      return;
+    }
     await navigate({
       to: '/documents/$documentId',
       params: { documentId: stateRef.current.documentId },
@@ -497,7 +599,7 @@ function Editor({
       setReviewOpen(false);
       return;
     }
-    const published = await publishDocument(current.documentId);
+    const published = await publishDocument(current.documentId, delivery);
     if ('error' in published) {
       sendingRef.current = false;
       setSending(false);
@@ -526,6 +628,12 @@ function Editor({
               email: signer.email,
             })),
           );
+          const first = waiting[0];
+          if (first && (delivery === 'link' || !first.email)) {
+            const issued = await reissueInvite(first.id);
+            if ('error' in issued) setLinkNote(issued.error);
+            else setShareLink({ name: first.name, url: issued.url });
+          }
           break;
         }
       }
@@ -549,19 +657,10 @@ function Editor({
     <>
       {phone ? (
         <MobileHeader
+          template={template}
           fileName={fileName}
           onRename={rename}
-          saveText={
-            sent
-              ? ''
-              : saveState === 'saving'
-                ? 'Saving draft…'
-                : saveState === 'saved'
-                  ? 'Draft saved'
-                  : saveState === 'error'
-                    ? 'Draft not saved'
-                    : ''
-          }
+          saveText={saveLabel(saveState, sent, template)}
           saveError={saveState === 'error'}
           sending={sending}
           onClose={() => void leave()}
@@ -572,19 +671,10 @@ function Editor({
           <EditorHeader
             fileName={fileName}
             onRename={rename}
-            saveText={
-              sent
-                ? ''
-                : saveState === 'saving'
-                  ? 'Saving draft…'
-                  : saveState === 'saved'
-                    ? 'Draft saved'
-                    : saveState === 'error'
-                      ? 'Draft not saved'
-                      : ''
-            }
+            saveText={saveLabel(saveState, sent, template)}
             saveState={saveState}
-            problems={countProblems(state.signers, state.fields)}
+            template={template}
+            problems={template ? 0 : countProblems(state.signers, state.fields)}
             issues={problemList(state.signers, state.fields)}
             onShowIssues={() => {
               setRevealErrors(true);
@@ -594,7 +684,12 @@ function Editor({
             sending={sending}
             onClose={() => void leave()}
             onReplace={onReplace}
-            onSend={() => {
+            onSend={(way) => {
+              if (template) {
+                void leave();
+                return;
+              }
+              setDelivery(way);
               setRevealErrors(true);
               setReviewOpen(true);
             }}
@@ -650,17 +745,24 @@ function Editor({
       ) : null}
       {phone ? (
         <MobileReview
+          template={template}
           file={file}
           fileName={fileName}
           pageCount={upload.pageCount}
           signers={state.signers}
           fields={state.fields}
           checks={checkSigners(state.signers, state.fields)}
+          delivery={delivery}
+          onChooseDelivery={setDelivery}
           revealErrors={revealErrors}
           locked={sent}
           sending={sending}
           dispatch={dispatch}
           onReview={() => {
+            if (template) {
+              void leave();
+              return;
+            }
             setRevealErrors(true);
             setReviewOpen(true);
           }}
@@ -721,13 +823,15 @@ function Editor({
         </DeskDrag>
       )}
       <ReviewDialog
-        open={reviewOpen && !sent}
+        open={reviewOpen && !sent && !template}
         onOpenChange={setReviewOpen}
         fileName={fileName}
         pageCount={upload.pageCount}
         fieldCount={state.fields.length}
         signers={state.signers}
         checks={checkSigners(state.signers, state.fields)}
+        delivery={delivery}
+        emptyPrefills={emptyPrefills(state.fields)}
         sending={sending}
         onSend={() => void send()}
       />
@@ -742,11 +846,16 @@ function Editor({
             </span>
             <AlertDialogTitle>Sent for signature</AlertDialogTitle>
             <AlertDialogDescription>
-              {nextName
-                ? `${nextName} is next. This document can no longer be edited. Open it to copy their signing link.`
-                : 'This document can no longer be edited. The next person is invited in order. Open it to copy their signing link.'}
+              {delivery === 'link'
+                ? 'No emails were sent. Copy the link below and share it with the first signer. This document can no longer be edited.'
+                : nextName
+                  ? `${nextName} is next. This document can no longer be edited. Open it to copy their signing link.`
+                  : 'This document can no longer be edited. The next person is invited in order. Open it to copy their signing link.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {delivery === 'link' || shareLink || linkNote ? (
+            <ShareLink link={shareLink} note={linkNote} />
+          ) : null}
           <AlertDialogFooter>
             <AlertDialogCancel>Stay here</AlertDialogCancel>
             <AlertDialogAction onClick={() => void leave()}>

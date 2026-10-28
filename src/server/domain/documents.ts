@@ -23,17 +23,30 @@ import {
 } from '#/server/domain/delivery.ts';
 import { publishBlocker } from '#/server/domain/publish-rules.ts';
 import { readLastOpId } from '#/server/domain/secrets.ts';
+import { assertRoomForTemplate } from '#/server/domain/templates.ts';
 import { AppError } from '#/server/errors.ts';
 
 const signerDraftSchema = z.strictObject({
   id: ulidSchema,
   name: z.string().max(80),
   email: z.string().max(200),
+  /** This signer is the owner, signing their own document. */
+  self: z.boolean().optional(),
 });
+
+const signerList = z
+  .array(signerDraftSchema)
+  .min(1)
+  .max(limits.signersPerDocument)
+  .refine((list) => list.filter((signer) => signer.self).length <= 1, {
+    message: 'Only one signer can be you.',
+  });
 
 export const createDraftInputSchema = z.strictObject({
   id: ulidSchema,
   title: z.string().trim().min(1).max(200),
+  /** A template is edited like a draft but is never sent; it is copied into documents. */
+  kind: z.enum(['document', 'template']).optional(),
 });
 
 export const renameDraftInputSchema = z.strictObject({
@@ -44,7 +57,7 @@ export const renameDraftInputSchema = z.strictObject({
 export const saveSignersInputSchema = z.strictObject({
   documentId: ulidSchema,
   layoutVersion: z.number().int().nonnegative(),
-  signers: z.array(signerDraftSchema).min(1).max(limits.signersPerDocument),
+  signers: signerList,
 });
 
 export const savePreparationInputSchema = saveSignersInputSchema.extend({
@@ -52,6 +65,10 @@ export const savePreparationInputSchema = saveSignersInputSchema.extend({
 });
 
 const documentIdSchema = z.strictObject({ documentId: ulidSchema });
+
+export const publishInputSchema = documentIdSchema.extend({
+  delivery: z.enum(['email', 'link']).optional(),
+});
 
 export { documentIdSchema, uploadInitSchema };
 
@@ -62,10 +79,13 @@ type SignerDraft = z.infer<typeof signerDraftSchema>;
 export async function createDraft(input: {
   id: string;
   title: string;
+  kind?: 'document' | 'template';
   ownerId: string;
   now?: number;
 }): Promise<{ documentId: string }> {
   const now = input.now ?? Date.now();
+  const kind = input.kind ?? 'document';
+  if (kind === 'template') await assertRoomForTemplate(input.ownerId);
   const opId = ulid();
   const audit = await planAudit({
     documentId: input.id,
@@ -73,7 +93,10 @@ export async function createDraft(input: {
     actorType: 'owner',
     actorId: input.ownerId,
     occurredAt: now,
-    payload: { title: input.title },
+    payload:
+      kind === 'template'
+        ? { title: input.title, template: true }
+        : { title: input.title },
     prev: null,
   });
   const db = getDb();
@@ -83,6 +106,7 @@ export async function createDraft(input: {
         id: input.id,
         ownerId: input.ownerId,
         title: input.title,
+        kind,
         status: 'draft',
         uploadStatus: 'pending',
         pageCount: 0,
@@ -357,10 +381,19 @@ export async function publish(input: {
   documentId: string;
   /** Public origin for the invite link. The queue handler has no request to read it from. */
   origin?: string;
+  /** 'link' sends no mail to signers: the owner copies each signing link. Default 'email'. */
+  delivery?: 'email' | 'link';
   now?: number;
 }): Promise<{ documentId: string; status: 'in_progress' }> {
   const now = input.now ?? Date.now();
+  const delivery = input.delivery ?? 'email';
   const current = await ownedDraft(input.documentId, input.ownerId);
+  if (current.kind === 'template') {
+    throw new AppError(
+      409,
+      'A template is not sent. Use it to make a document, then send that.',
+    );
+  }
   const people = await getDb()
     .select()
     .from(signers)
@@ -377,6 +410,7 @@ export async function publish(input: {
     geometryJson: current.geometryJson,
     signers: people,
     fields: layout.fields,
+    delivery,
   });
   if (blocker) throw new AppError(422, blocker);
   const layoutSha =
@@ -392,6 +426,7 @@ export async function publish(input: {
       sourceSha256: current.sourceSha256,
       geometrySha256: current.geometrySha256,
       layoutSha256: layoutSha,
+      delivery,
     },
   });
   const outboxId = ulid();
@@ -405,6 +440,7 @@ export async function publish(input: {
             .update(documents)
             .set({
               status: 'in_progress',
+              delivery,
               expiresAt: now + 30 * DAY_MS,
               version: sql`${documents.version} + 1`,
               lastOpId: opId,
@@ -621,6 +657,7 @@ function signerWrites(documentId: string, people: readonly SignerDraft[]) {
         signingOrder: index + 1,
         email: signer.email.trim().toLowerCase(),
         name: signer.name.trim(),
+        isSelf: signer.self === true,
         status: 'pending' as const,
         version: 0,
       })),
@@ -658,6 +695,8 @@ export type OwnedDocument = {
   signed: number;
   /** The person who currently holds the signing link. */
   waitingOn: string | null;
+  /** The owner's own signer id when it is their turn to sign, else null. */
+  youToSign: string | null;
 };
 
 export type OwnedSigner = {
@@ -669,6 +708,8 @@ export type OwnedSigner = {
   invitedAt: number | null;
   firstViewedAt: number | null;
   signedAt: number | null;
+  /** This signer is the owner. */
+  isSelf: boolean;
   clientIp: string | null;
   userAgent: string | null;
   declineReason: string | null;
@@ -693,6 +734,8 @@ export type OwnedDocumentDetail = {
   updatedAt: number;
   expiresAt: number | null;
   pageCount: number;
+  /** 'link': no mail goes to signers; the owner copies each signing link. */
+  delivery: 'email' | 'link';
   uploaded: boolean;
   /** True while queued work for this document (mail, next invite, notices) is not finished. */
   busy: boolean;
@@ -713,14 +756,16 @@ export async function listOwnedDocuments(
       expiresAt: documents.expiresAt,
     })
     .from(documents)
-    .where(eq(documents.ownerId, ownerId))
+    .where(and(eq(documents.ownerId, ownerId), eq(documents.kind, 'document')))
     .orderBy(desc(documents.updatedAt));
   if (rows.length === 0) return [];
   const people = await getDb()
     .select({
+      id: signers.id,
       documentId: signers.documentId,
       status: signers.status,
       name: signers.name,
+      isSelf: signers.isSelf,
     })
     .from(signers)
     .where(
@@ -737,6 +782,12 @@ export async function listOwnedDocuments(
       signed: theirs.filter((person) => person.status === 'signed').length,
       waitingOn:
         theirs.find((person) => person.status === 'invited')?.name ?? null,
+      youToSign:
+        row.status === 'in_progress'
+          ? (theirs.find(
+              (person) => person.isSelf && person.status === 'invited',
+            )?.id ?? null)
+          : null,
     };
   });
 }
@@ -755,9 +806,16 @@ export async function readOwnedDocument(
       expiresAt: documents.expiresAt,
       pageCount: documents.pageCount,
       uploadStatus: documents.uploadStatus,
+      delivery: documents.delivery,
     })
     .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.ownerId, ownerId)))
+    .where(
+      and(
+        eq(documents.id, documentId),
+        eq(documents.ownerId, ownerId),
+        eq(documents.kind, 'document'),
+      ),
+    )
     .limit(1);
   if (!document) throw new AppError(404, 'This document was not found.');
   const people = await getDb()
@@ -770,6 +828,7 @@ export async function readOwnedDocument(
       invitedAt: signers.invitedAt,
       firstViewedAt: signers.firstViewedAt,
       signedAt: signers.signedAt,
+      isSelf: signers.isSelf,
       clientIp: signers.clientIp,
       userAgent: signers.userAgent,
       declineReason: signers.declineReason,
@@ -798,6 +857,7 @@ export async function readOwnedDocument(
     updatedAt: document.updatedAt,
     expiresAt: document.expiresAt,
     pageCount: document.pageCount,
+    delivery: document.delivery === 'link' ? 'link' : 'email',
     uploaded: document.uploadStatus === 'uploaded',
     busy: delivery.busy,
     signers: people.map((person) => ({
@@ -836,6 +896,7 @@ function sameSigners(
     id: string;
     name: string;
     email: string;
+    isSelf: boolean;
     signingOrder: number;
   }[],
   incoming: readonly SignerDraft[],
@@ -847,6 +908,7 @@ function sameSigners(
       next !== undefined &&
       signer.id === next.id &&
       signer.name === next.name.trim() &&
+      signer.isSelf === (next.self === true) &&
       signer.email === next.email.trim().toLowerCase() &&
       signer.signingOrder === index + 1
     );

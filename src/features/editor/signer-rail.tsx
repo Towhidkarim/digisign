@@ -11,6 +11,7 @@ import {
   PenLine,
   Plus,
   SquareCheck,
+  TextCursorInput,
   TriangleAlert,
   Type,
   UserRound,
@@ -41,6 +42,7 @@ import {
 } from '#/features/editor/reducer.ts';
 import { summarizeSigner, summaryLine } from '#/features/editor/summary.ts';
 import { cn } from '#/lib/utils.ts';
+import { getSessionFn } from '#/server/session.ts';
 
 const FIELD_GROUPS: readonly {
   title: string;
@@ -49,6 +51,7 @@ const FIELD_GROUPS: readonly {
   { title: 'Signature', kinds: ['signature', 'initials'] },
   { title: 'Name and date', kinds: ['date_signed', 'full_name'] },
   { title: 'Text', kinds: ['text', 'checkbox'] },
+  { title: 'Filled in by you', kinds: ['prefilled_text'] },
 ];
 
 const FIELD_ICON = {
@@ -58,6 +61,7 @@ const FIELD_ICON = {
   full_name: UserRound,
   text: Type,
   checkbox: SquareCheck,
+  prefilled_text: TextCursorInput,
 } as const;
 
 const OVERLINE =
@@ -215,6 +219,21 @@ function SignerRow({
   const nameError =
     check?.name && (revealErrors || signer.name.length > 0 || emailTouched);
   const select = () => dispatch({ type: 'select-signer', id: signer.id });
+  /** Becoming "me" fills in the account's own name and email. */
+  async function chooseSelf(self: boolean) {
+    if (!self) {
+      dispatch({ type: 'set-signer-self', id: signer.id, self: false });
+      return;
+    }
+    const session = await getSessionFn();
+    dispatch({
+      type: 'set-signer-self',
+      id: signer.id,
+      self: true,
+      name: session?.user.name,
+      email: session?.user.email,
+    });
+  }
   // Hidden until the card is selected or focused, but always in the tab order.
   const control = cn(
     'size-8 text-muted-foreground transition-opacity',
@@ -371,7 +390,7 @@ function SignerRow({
         type="email"
         value={signer.email}
         maxLength={200}
-        placeholder="Email"
+        placeholder="Email (blank: share a link yourself)"
         aria-invalid={emailError ? true : undefined}
         aria-describedby={emailError ? `email-error-${signer.id}` : undefined}
         className="mt-2 h-10 w-full min-w-0 rounded-md border border-input bg-card px-3 text-sm text-foreground outline-none placeholder:text-ink-subtle focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20"
@@ -386,6 +405,15 @@ function SignerRow({
         }
         onClick={select}
       />
+      <label className="mt-2 flex cursor-pointer items-center gap-2 text-small text-muted-foreground">
+        <input
+          type="checkbox"
+          className="size-4 accent-[var(--primary)]"
+          checked={signer.self === true}
+          onChange={(event) => void chooseSelf(event.target.checked)}
+        />
+        I'll sign this one myself
+      </label>
       {emailError ? (
         <p
           id={`email-error-${signer.id}`}

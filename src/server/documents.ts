@@ -15,6 +15,7 @@ import {
   initUpload,
   listOwnedDocuments,
   publish,
+  publishInputSchema,
   readOwnedDocument,
   renameDraft,
   renameDraftInputSchema,
@@ -25,7 +26,7 @@ import {
   saveSignersInputSchema,
   voidDocument,
 } from '#/server/domain/documents.ts';
-import { reissueInvite } from '#/server/domain/invite.ts';
+import { reissueInvite, startOwnSigning } from '#/server/domain/invite.ts';
 import { readDocumentPreview } from '#/server/domain/preview.ts';
 import { publishOutboxQuietly } from '#/server/engine/outbox.ts';
 import { isAppError } from '#/server/errors.ts';
@@ -102,6 +103,7 @@ export const getDraftFn = createServerFn({ method: 'GET' })
       return {
         id: loaded.document.id,
         title: loaded.document.title,
+        kind: loaded.document.kind === 'template' ? 'template' : 'document',
         status: loaded.document.status,
         uploadStatus: loaded.document.uploadStatus,
         layoutVersion: loaded.document.layoutVersion,
@@ -111,6 +113,7 @@ export const getDraftFn = createServerFn({ method: 'GET' })
           id: signer.id,
           name: signer.name,
           email: signer.email,
+          self: signer.isSelf,
           status: signer.status,
           signingOrder: signer.signingOrder,
         })),
@@ -160,12 +163,13 @@ export const savePreparationFn = createServerFn({ method: 'POST' })
   );
 
 export const publishFn = createServerFn({ method: 'POST' })
-  .validator(documentIdSchema)
+  .validator(publishInputSchema)
   .handler(async ({ data }) =>
     settle(async () => {
       const published = await publish({
         ownerId: (await resolveActor()).id,
         documentId: data.documentId,
+        delivery: data.delivery,
         origin: getRequestUrl().origin,
       });
       await publishOutboxQuietly(data.documentId);
@@ -199,6 +203,23 @@ export const reissueInviteFn = createServerFn({ method: 'POST' })
       return {
         ok: true as const,
         url: `${getRequestUrl().origin}/s/${reissued.token}`,
+      };
+    }),
+  );
+
+/** Opens the owner's own turn to sign: a new link, nothing mailed. */
+export const signAsOwnerFn = createServerFn({ method: 'POST' })
+  .validator(signerIdSchema)
+  .handler(async ({ data }) =>
+    settle(async () => {
+      const started = await startOwnSigning({
+        ownerId: (await resolveActor()).id,
+        signerId: data.signerId,
+        origin: getRequestUrl().origin,
+      });
+      return {
+        ok: true as const,
+        url: `${getRequestUrl().origin}/s/${started.token}`,
       };
     }),
   );

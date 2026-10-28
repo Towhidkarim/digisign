@@ -49,6 +49,8 @@ export type UploadStageProps = {
   picked: { name: string; size: number } | null;
   over: boolean;
   error: string;
+  /** Making a template rather than a document to send. */
+  template?: boolean;
   /** Shown when the tab's saved draft could not keep its PDF. */
   needsFile: boolean;
   resume: { title: string } | null;
@@ -70,21 +72,24 @@ export function UploadStage(props: UploadStageProps) {
     <>
       <AppHeader home="/dashboard" bordered>
         <Button asChild variant="ghost" size="sm">
-          <Link to="/dashboard">
+          <Link to={props.template ? '/templates' : '/dashboard'}>
             <X strokeWidth={1.75} />
             Close
           </Link>
         </Button>
       </AppHeader>
       <main className="min-h-0 flex-1 overflow-auto px-4 pb-16 sm:px-6">
-        <Stepper current={0} className="mx-auto mt-6 sm:mt-8" />
+        {props.template ? null : (
+          <Stepper current={0} className="mx-auto mt-6 sm:mt-8" />
+        )}
         <div className="mx-auto mt-8 w-full max-w-2xl sm:mt-12">
           <h1 className="text-title font-semibold tracking-tight">
-            Upload your PDF
+            {props.template ? 'Upload your template PDF' : 'Upload your PDF'}
           </h1>
           <p className="mt-2 max-w-[60ch] leading-relaxed text-muted-foreground">
-            Place the fields, name who signs and in what order, then send. Until
-            you send, the document stays a draft.
+            {props.template
+              ? 'Place the fields, name the signer slots, and add prefilled text for the parts you fill in each time. Then reuse it for every document.'
+              : 'Place the fields, name who signs and in what order, then send. Until you send, the document stays a draft.'}
           </p>
           {notice && !busy ? <ErrorAlert message={notice} /> : null}
           {phase === 'reading' && props.picked ? (

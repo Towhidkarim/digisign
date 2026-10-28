@@ -24,6 +24,10 @@ import signingSql from '../../migrations/0000_signing.sql?raw';
 import guardsSql from '../../migrations/0001_guards.sql?raw';
 import engineSql from '../../migrations/0002_engine.sql?raw';
 import authSql from '../../migrations/0003_auth.sql?raw';
+import templatesSql from '../../migrations/0004_templates.sql?raw';
+import deliverySql from '../../migrations/0005_delivery.sql?raw';
+import selfSignerSql from '../../migrations/0006_self_signer.sql?raw';
+import savedSignatureSql from '../../migrations/0007_saved_signature.sql?raw';
 
 export const ORIGIN = 'https://digisign.test';
 
@@ -42,7 +46,16 @@ export async function migrate(): Promise<void> {
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'documents'",
   ).first();
   if (existing) return;
-  for (const file of [signingSql, guardsSql, engineSql, authSql]) {
+  for (const file of [
+    signingSql,
+    guardsSql,
+    engineSql,
+    authSql,
+    templatesSql,
+    deliverySql,
+    selfSignerSql,
+    savedSignatureSql,
+  ]) {
     for (const statement of file.split('--> statement-breakpoint')) {
       const sql = statement.trim();
       if (sql) await env.DB.prepare(sql).run();

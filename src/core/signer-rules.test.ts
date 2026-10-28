@@ -6,6 +6,7 @@ import {
   checkSigners,
   countIssues,
   isReady,
+  PREFILL_MESSAGE,
   SIGNER_MESSAGES,
 } from './signer-rules.ts';
 
@@ -49,7 +50,7 @@ describe('checkSigners', () => {
     expect(checks.map((check) => check.name)).toEqual([true, true]);
   });
 
-  it('flags a missing email and a badly formed one', () => {
+  it('lets a signer have no email, but flags a badly formed one', () => {
     const checks = checkSigners(
       [
         { ...ada, email: '' },
@@ -57,7 +58,7 @@ describe('checkSigners', () => {
       ],
       [field('a', 'signature'), field('b', 'signature')],
     );
-    expect(checks.map((check) => check.email)).toEqual(['missing', 'invalid']);
+    expect(checks.map((check) => check.email)).toEqual([null, 'invalid']);
   });
 
   it('flags every signer who shares an email, ignoring case and spaces', () => {
@@ -84,7 +85,7 @@ describe('checkSigners', () => {
       ],
       [],
     );
-    expect(checks.map((check) => check.email)).toEqual(['missing', 'missing']);
+    expect(checks.map((check) => check.email)).toEqual([null, null]);
   });
 
   it.each([
@@ -109,8 +110,8 @@ describe('countIssues', () => {
       [ada, { id: 'b', name: '', email: '' }],
       [field('a', 'signature')],
     );
-    // Bo: name, email, signature.
-    expect(countIssues(checks)).toBe(3);
+    // Bo: name and signature (a blank email is fine).
+    expect(countIssues(checks)).toBe(2);
   });
 
   it('is zero when everything is ready', () => {
@@ -155,5 +156,13 @@ describe("agreement with the server's publish check", () => {
     const fields = [field('a', 'signature'), field('b', 'signature')];
     expect(countIssues(checkSigners(signers, fields))).toBe(0);
     expect(blocker(signers, fields)).toBeNull();
+  });
+
+  it('holds back an empty prefilled field and lets a written one through', () => {
+    const signature = field('a', 'signature');
+    const empty = { ...field('a', 'prefilled_text'), prefill: '  ' };
+    const written = { ...empty, prefill: 'Acme Ltd' };
+    expect(blocker([ada], [signature, empty])).toBe(PREFILL_MESSAGE);
+    expect(blocker([ada], [signature, written])).toBeNull();
   });
 });

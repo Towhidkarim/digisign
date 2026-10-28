@@ -6,6 +6,7 @@ import {
   PDFDocument,
   type PDFFont,
   PDFHexString,
+  type PDFImage,
   PDFName,
   type PDFPage,
   rgb,
@@ -49,6 +50,7 @@ export async function render(
   const pdf = await PDFDocument.load(originalBytes, { updateMetadata: false });
   const body = await pdf.embedFont(StandardFonts.Helvetica);
   const script = await embedScripts(pdf, manifest, options.fonts);
+  const images = await embedImages(pdf, manifest);
   const pages = pdf.getPages();
   const verifyUrl = `${options.verifyOrigin.replace(/\/$/, '')}/v/${manifest.documentId}`;
 
@@ -57,7 +59,16 @@ export async function render(
     const geometry = manifest.geometry[field.pageIndex];
     const value = valueFor(manifest, field.id);
     if (!page || !geometry || !value) continue;
-    drawField(page, geometry, field, value, body, script, options.fonts);
+    drawField(
+      page,
+      geometry,
+      field,
+      value,
+      body,
+      script,
+      options.fonts,
+      images,
+    );
   }
 
   if (options.preview) {
@@ -112,6 +123,58 @@ function drawPreviewStamp(
   }
 }
 
+/** Each distinct image is embedded once, however many fields use it. */
+async function embedImages(
+  pdf: PDFDocument,
+  manifest: LocalManifest,
+): Promise<Map<string, PDFImage>> {
+  const images = new Map<string, PDFImage>();
+  for (const signer of manifest.signers) {
+    for (const value of signer.values) {
+      if (value.signature?.kind !== 'image') continue;
+      const { data } = value.signature;
+      if (images.has(data)) continue;
+      const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+      images.set(data, await pdf.embedPng(bytes));
+    }
+  }
+  return images;
+}
+
+/** Fits the image inside the field, centred, keeping its proportions. */
+function drawImage(
+  page: PDFPage,
+  geometry: PageGeometry,
+  field: FieldInput,
+  image: PDFImage,
+): void {
+  const topLeft = viewMicroToPdf(geometry, field.x, field.y);
+  const topRight = viewMicroToPdf(geometry, field.x + field.w, field.y);
+  const bottomLeft = viewMicroToPdf(geometry, field.x, field.y + field.h);
+  const span = Math.hypot(topRight.x - topLeft.x, topRight.y - topLeft.y);
+  const fieldHeight = Math.hypot(
+    bottomLeft.x - topLeft.x,
+    bottomLeft.y - topLeft.y,
+  );
+  const scale = Math.min(span / image.width, fieldHeight / image.height);
+  const width = image.width * scale;
+  const height = image.height * scale;
+  const ux = (topRight.x - topLeft.x) / (span || 1);
+  const uy = (topRight.y - topLeft.y) / (span || 1);
+  const vx = (bottomLeft.x - topLeft.x) / (fieldHeight || 1);
+  const vy = (bottomLeft.y - topLeft.y) / (fieldHeight || 1);
+  // The image's bottom-left corner, found by walking from the field's top-left.
+  const left = (span - width) / 2;
+  const down = (fieldHeight + height) / 2;
+  page.drawImage(image, {
+    x: topLeft.x + ux * left + vx * down,
+    y: topLeft.y + uy * left + vy * down,
+    width,
+    height,
+    rotate: degrees((Math.atan2(uy, ux) * 180) / Math.PI),
+  });
+}
+
 async function embedScripts(
   pdf: PDFDocument,
   manifest: LocalManifest,
@@ -142,7 +205,13 @@ function drawField(
   body: PDFFont,
   script: Partial<Record<ScriptFont, PDFFont>>,
   fonts: ScriptFontBytes,
+  images: ReadonlyMap<string, PDFImage>,
 ): void {
+  if (value.signature?.kind === 'image') {
+    const image = images.get(value.signature.data);
+    if (image) drawImage(page, geometry, field, image);
+    return;
+  }
   if (value.signature?.kind === 'drawn') {
     const strokes = unpackStrokes(value.signature.strokes);
     const { viewW, viewH } = viewSize(geometry);

@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 
 import { Button } from '#/components/ui/button.tsx';
 import { DocumentLoadError } from '#/features/dashboard/document-list.tsx';
+import { DocumentRow } from '#/features/dashboard/document-row.tsx';
 import { DocumentsCard } from '#/features/dashboard/documents-card.tsx';
 import { EmptyDocuments } from '#/features/dashboard/empty-state.tsx';
 import { OverviewStrip } from '#/features/dashboard/overview-strip.tsx';
@@ -60,6 +61,26 @@ function DashboardPage() {
         </div>
       ) : (
         <>
+          {counts.you > 0 ? (
+            <section
+              aria-label="Waiting for your signature"
+              className="mt-6 overflow-hidden rounded-lg border border-primary bg-card md:mt-8"
+            >
+              <h2 className="border-b border-border bg-brand-soft px-4 py-3 text-subheading font-semibold md:px-5">
+                Waiting for your signature
+              </h2>
+              <ul className="divide-y divide-border">
+                {documents
+                  .filter((document) => document.youToSign)
+                  .slice(0, 5)
+                  .map((document) => (
+                    <li key={document.id}>
+                      <DocumentRow document={document} />
+                    </li>
+                  ))}
+              </ul>
+            </section>
+          ) : null}
           <OverviewStrip counts={counts} />
           <DocumentsCard documents={documents} limit={6} />
         </>

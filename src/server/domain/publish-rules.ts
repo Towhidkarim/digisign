@@ -8,8 +8,11 @@ import {
 import { footerStripMicro, ptToMicro, viewSize } from '#/core/coords.ts';
 import { limits, minFieldSizePt } from '#/core/limits.ts';
 import {
+  type Delivery,
   emailPattern,
+  emptyPrefills,
   isSigningKind,
+  PREFILL_MESSAGE,
   SIGNER_MESSAGES,
 } from '#/core/signer-rules.ts';
 
@@ -19,6 +22,7 @@ export type PublishSigner = {
   id: string;
   email: string;
   name: string;
+  isSelf?: boolean;
 };
 
 export function publishBlocker(input: {
@@ -27,6 +31,7 @@ export function publishBlocker(input: {
   geometryJson: string | null;
   signers: readonly PublishSigner[];
   fields: readonly FieldInput[];
+  delivery?: Delivery;
 }): string | null {
   if (input.uploadStatus !== 'uploaded') {
     return 'Upload the PDF before sending it.';
@@ -50,7 +55,8 @@ export function publishBlocker(input: {
   const signerIds = new Set<string>();
   for (const signer of input.signers) {
     if (!signer.name.trim()) return SIGNER_MESSAGES.name;
-    if (!emailPattern.test(signer.email.trim())) {
+    const email = signer.email.trim();
+    if (email !== '' && !emailPattern.test(email)) {
       return SIGNER_MESSAGES.email;
     }
     signerIds.add(signer.id);
@@ -86,6 +92,7 @@ export function publishBlocker(input: {
       return SIGNER_MESSAGES.signature;
     }
   }
+  if (emptyPrefills(input.fields) > 0) return PREFILL_MESSAGE;
   return null;
 }
 

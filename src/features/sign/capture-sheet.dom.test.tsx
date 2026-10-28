@@ -89,7 +89,7 @@ describe('capture sheet', () => {
     await openSheet();
     await screen.findByRole('dialog');
     const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
-    expect(tabs).toEqual(['Draw', 'Type']);
+    expect(tabs).toEqual(['Draw', 'Type', 'Image']);
   });
 
   it('shows Saved when a signature is remembered', async () => {
@@ -105,6 +105,7 @@ describe('capture sheet', () => {
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Draw',
       'Type',
+      'Image',
       'Saved',
     ]);
   });

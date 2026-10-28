@@ -10,4 +10,5 @@ export {
   outbox,
 } from '#/db/schema/messaging.ts';
 export { runtimeProbes } from '#/db/schema/probes.ts';
+export { savedSignatures } from '#/db/schema/saved-signatures.ts';
 export { signerSessions, signers, signerTokens } from '#/db/schema/signers.ts';

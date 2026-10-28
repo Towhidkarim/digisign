@@ -23,6 +23,7 @@ function timeline(
     return [`Signed ${formatDayTime(signer.signedAt)}`];
   }
   if (signer.status === 'invited') {
+    if (signer.isSelf) return ['Your turn to sign'];
     if (signer.inviteEmail === 'sending') return ['Sending the invite…'];
     if (signer.inviteEmail === 'failed') {
       return ['The invite email could not be delivered'];
@@ -105,6 +106,11 @@ export function SigningOrder({ signers }: { signers: readonly OwnedSigner[] }) {
                         {signer.order}.{' '}
                       </span>
                       {signer.name}
+                      {signer.isSelf ? (
+                        <span className="ml-2 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-fg">
+                          You
+                        </span>
+                      ) : null}
                     </p>
                     <SignerStatusBadge status={badgeStatus(signer)} />
                   </div>

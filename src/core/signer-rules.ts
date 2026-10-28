@@ -7,6 +7,22 @@ import type { FieldInput } from '#/core/contracts/index.ts';
 
 export const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** How the signers are reached. 'link' sends no mail: the sender copies each signing link. */
+export type Delivery = 'email' | 'link';
+
+export const PREFILL_MESSAGE =
+  'Fill in every prefilled text field before sending.';
+
+/** Prefilled text the sender has not written yet. Each one blocks sending. */
+export function emptyPrefills(
+  fields: readonly Pick<FieldInput, 'kind' | 'prefill'>[],
+): number {
+  return fields.filter(
+    (field) =>
+      field.kind === 'prefilled_text' && (field.prefill ?? '').trim() === '',
+  ).length;
+}
+
 export const SIGNER_MESSAGES = {
   name: 'Every signer needs a name.',
   email: 'Every signer needs an email address.',
@@ -24,7 +40,13 @@ export type SignerCheck = {
   signature: boolean;
 };
 
-type SignerInput = { id: string; name: string; email: string };
+type SignerInput = {
+  id: string;
+  name: string;
+  email: string;
+  /** The owner signing their own document: no address is needed. */
+  self?: boolean;
+};
 
 function normalizedEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -33,6 +55,16 @@ function normalizedEmail(email: string): string {
 /** The kinds that let a signer actually sign. Text, date, name and checkbox fields do not. */
 export function isSigningKind(kind: FieldInput['kind']): boolean {
   return kind === 'signature' || kind === 'initials';
+}
+
+/**
+ * The kinds the signer never fills in: the date and the name write themselves, and prefilled text
+ * is whatever the sender put there. The server stamps all three when the signer signs.
+ */
+export function isAutoKind(kind: FieldInput['kind']): boolean {
+  return (
+    kind === 'date_signed' || kind === 'full_name' || kind === 'prefilled_text'
+  );
 }
 
 /** One result per signer, in the same order. */
@@ -53,7 +85,8 @@ export function checkSigners(
   return signers.map((signer) => {
     const email = normalizedEmail(signer.email);
     let issue: EmailIssue | null = null;
-    if (!email) issue = 'missing';
+    // An address is optional: a signer without one gets a link the sender shares. One that is typed still has to look like one.
+    if (!email) issue = null;
     else if (!emailPattern.test(email)) issue = 'invalid';
     else if ((counts.get(email) ?? 0) > 1) issue = 'duplicate';
     return {

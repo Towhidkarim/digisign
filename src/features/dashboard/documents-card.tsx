@@ -19,6 +19,7 @@ import type { OwnedDocument } from '#/server/domain/documents.ts';
 
 const TABS: readonly { value: DocumentFilter; label: string }[] = [
   { value: 'all', label: 'All' },
+  { value: 'you', label: 'To sign by you' },
   { value: 'out', label: 'Out for signature' },
   { value: 'drafts', label: 'Drafts' },
   { value: 'completed', label: 'Completed' },

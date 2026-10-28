@@ -171,3 +171,62 @@ describe('editor reducer', () => {
     expect(full.fields).toHaveLength(300);
   });
 });
+
+describe('prefilled text', () => {
+  function withPrefilled() {
+    return editorReducer(desk(), {
+      type: 'place',
+      id: id(10),
+      pageIndex: 0,
+      kind: 'prefilled_text',
+      x: 300_000,
+      y: 300_000,
+    });
+  }
+
+  it('keeps the label and the text on the field, and the layout still validates', () => {
+    const typed = editorReducer(withPrefilled(), {
+      type: 'set-field-text',
+      id: id(10),
+      label: 'Client',
+      prefill: 'Acme Ltd',
+    });
+    expect(typed.fields[0]).toMatchObject({
+      kind: 'prefilled_text',
+      label: 'Client',
+      prefill: 'Acme Ltd',
+    });
+    expect(saveLayoutInputSchema.safeParse(toSaveLayout(typed)).success).toBe(
+      true,
+    );
+  });
+
+  it('ignores text for any other kind of field', () => {
+    const placed = editorReducer(desk(), {
+      type: 'place',
+      id: id(11),
+      pageIndex: 0,
+      kind: 'text',
+      x: 300_000,
+      y: 300_000,
+    });
+    const same = editorReducer(placed, {
+      type: 'set-field-text',
+      id: id(11),
+      label: 'x',
+      prefill: 'y',
+    });
+    expect(same).toBe(placed);
+  });
+
+  it('caps the label and the text at their limits', () => {
+    const typed = editorReducer(withPrefilled(), {
+      type: 'set-field-text',
+      id: id(10),
+      label: 'l'.repeat(500),
+      prefill: 'p'.repeat(500),
+    });
+    expect(typed.fields[0]?.label).toHaveLength(60);
+    expect(typed.fields[0]?.prefill).toHaveLength(240);
+  });
+});

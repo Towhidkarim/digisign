@@ -9,6 +9,7 @@ import type {
 } from '#/core/contracts/index.ts';
 import { submitSignatureInputSchema } from '#/core/contracts/index.ts';
 import { sha256Hex } from '#/core/hash.ts';
+import { isAutoKind } from '#/core/signer-rules.ts';
 import type { EditorSigner } from '#/features/editor/reducer.ts';
 import { evidenceHash, signingStateHash } from '#/features/sign/state-hash.ts';
 import { formatSignedAt } from '#/features/sign/values.ts';
@@ -310,7 +311,7 @@ function answerReady(
   field: FieldInput,
   values: readonly FieldValue[],
 ): boolean {
-  if (field.kind === 'date_signed' || field.kind === 'full_name') return true;
+  if (isAutoKind(field.kind)) return true;
   const value = values.find((item) => item.fieldId === field.id);
   if (!value) return false;
   if (field.kind === 'signature' || field.kind === 'initials') {
@@ -333,6 +334,10 @@ function completeValues(
     }
     if (field.kind === 'full_name') {
       return [{ fieldId: field.id, text: signerName || 'Signer' }];
+    }
+    if (field.kind === 'prefilled_text') {
+      const text = (field.prefill ?? '').trim();
+      return text ? [{ fieldId: field.id, text }] : [];
     }
     if (!given) return [];
     if (field.kind === 'checkbox') {

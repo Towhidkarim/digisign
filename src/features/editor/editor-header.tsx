@@ -1,4 +1,12 @@
-import { Check, MoreHorizontal, TriangleAlert, X } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  Link2,
+  Mail,
+  MoreHorizontal,
+  TriangleAlert,
+  X,
+} from 'lucide-react';
 
 import { Stepper } from '#/components/stepper.tsx';
 import { Button } from '#/components/ui/button.tsx';
@@ -14,12 +22,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '#/components/ui/tooltip.tsx';
+import type { Delivery } from '#/core/signer-rules.ts';
 import { TitleField } from '#/features/editor/title-field.tsx';
 
 export type SaveState = 'saving' | 'saved' | 'error' | '';
 
 /** The editor's top bar (56px): close, file and save status, steps, problems, menu, send. */
 export function EditorHeader({
+  template = false,
   fileName,
   saveText,
   saveState,
@@ -33,6 +43,8 @@ export function EditorHeader({
   onSend,
   onRename,
 }: {
+  /** Editing a template: no steps, no problems chip, and the main button just closes. */
+  template?: boolean;
   fileName: string;
   /** Saves a new name. Returns an error message, or null when it worked. */
   onRename: (title: string) => Promise<string | null>;
@@ -48,7 +60,8 @@ export function EditorHeader({
   sending: boolean;
   onClose: () => void;
   onReplace: () => void;
-  onSend: () => void;
+  /** Opens the review for that way of reaching the signers. */
+  onSend: (delivery: Delivery) => void;
 }) {
   return (
     <header className="grid h-14 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border bg-card px-3 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:px-4">
@@ -89,7 +102,13 @@ export function EditorHeader({
           ) : null}
         </div>
       </div>
-      <Stepper compact current={1} className="hidden lg:flex" />
+      {template ? (
+        <p className="hidden text-sm font-medium text-muted-foreground lg:block">
+          Template
+        </p>
+      ) : (
+        <Stepper compact current={1} className="hidden lg:flex" />
+      )}
       <div className="flex items-center justify-end gap-2">
         {problems > 0 ? (
           <TooltipProvider delayDuration={100}>
@@ -140,14 +159,56 @@ export function EditorHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button
-          type="button"
-          size="lg"
-          disabled={sent || sending}
-          onClick={onSend}
-        >
-          {sending ? 'Sending…' : 'Review and send'}
-        </Button>
+        <div className="flex items-center">
+          <Button
+            type="button"
+            size="lg"
+            className={template ? undefined : 'rounded-r-none'}
+            disabled={sent || sending}
+            onClick={() => onSend('email')}
+          >
+            {template
+              ? 'Save and exit'
+              : sending
+                ? 'Sending…'
+                : 'Review and send'}
+          </Button>
+          {template ? null : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="lg"
+                  aria-label="More ways to send"
+                  className="rounded-l-none border-l border-primary-foreground/30 px-2"
+                  disabled={sent || sending}
+                >
+                  <ChevronDown strokeWidth={1.75} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuItem onSelect={() => onSend('email')}>
+                  <Mail strokeWidth={1.75} />
+                  <span>
+                    Send by email
+                    <span className="block text-xs text-muted-foreground">
+                      Each signer is emailed their link.
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onSend('link')}>
+                  <Link2 strokeWidth={1.75} />
+                  <span>
+                    Send via link
+                    <span className="block text-xs text-muted-foreground">
+                      No emails. You copy each link and share it yourself.
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
     </header>
   );

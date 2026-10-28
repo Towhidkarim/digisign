@@ -19,6 +19,7 @@ import {
 import type { FieldInput, FieldValue } from '#/core/contracts/index.ts';
 import { microToPercent, viewSize } from '#/core/coords.ts';
 import { limits } from '#/core/limits.ts';
+import { isAutoKind } from '#/core/signer-rules.ts';
 import { FIELD_LABEL } from '#/features/editor/reducer.ts';
 import { CaptureSheet } from '#/features/sign/capture-sheet.tsx';
 import { Confirmation } from '#/features/sign/confirmation.tsx';
@@ -1060,7 +1061,7 @@ function FieldBox({
     "relative before:absolute before:top-1/2 before:left-1/2 before:size-full before:min-h-11 before:min-w-11 before:-translate-x-1/2 before:-translate-y-1/2 before:content-['']";
   const focusRing =
     'outline-none focus-visible:ring-[3px] focus-visible:ring-ring focus-visible:ring-offset-2';
-  const readOnly = field.kind === 'date_signed' || field.kind === 'full_name';
+  const readOnly = isAutoKind(field.kind);
 
   return (
     <div
@@ -1171,9 +1172,11 @@ function FieldBox({
           <span className="min-w-0 truncate">
             {field.kind === 'full_name'
               ? name || 'Signer'
-              : datePreview.reliable
-                ? datePreview.text
-                : 'Filled in when you sign'}
+              : field.kind === 'prefilled_text'
+                ? field.prefill
+                : datePreview.reliable
+                  ? datePreview.text
+                  : 'Filled in when you sign'}
           </span>
         </p>
       ) : null}

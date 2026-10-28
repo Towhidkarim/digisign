@@ -10,6 +10,7 @@ import {
   Eye,
   FileText,
   LoaderCircle,
+  PenLine,
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react';
@@ -36,6 +37,7 @@ import {
   formatUpdated,
   formatWhen,
 } from '#/features/dashboard/format.ts';
+import { SignNowButton } from '#/features/dashboard/sign-now.tsx';
 import { SigningOrder } from '#/features/dashboard/signing-order.tsx';
 import { lazyDesk } from '#/lib/lazy-desk.tsx';
 import { cn } from '#/lib/utils.ts';
@@ -108,7 +110,10 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
       await navigator.clipboard.writeText(result.url);
       setNotice({
         tone: 'info',
-        text: `Link copied. The link ${signer.name} had before no longer works, and a new one was sent.`,
+        text:
+          document.delivery === 'link'
+            ? `Link copied. The link ${signer.name} had before no longer works.`
+            : `Link copied. The link ${signer.name} had before no longer works, and a new one was sent.`,
       });
     } catch {
       setNotice({
@@ -274,7 +279,10 @@ export function DocumentDesk({ document }: { document: OwnedDocumentDetail }) {
         invited={invited}
         next={next}
         busy={busy === 'link'}
-        onCopy={invited ? () => void copyLink(invited) : undefined}
+        onCopy={
+          invited && !invited.isSelf ? () => void copyLink(invited) : undefined
+        }
+        signNow={invited?.isSelf ? invited.id : undefined}
       />
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_17.5rem]">
@@ -412,7 +420,10 @@ function StatusCallout({
   next,
   busy,
   onCopy,
+  signNow,
 }: {
+  /** The owner's own signer id, when it is their turn. */
+  signNow: string | undefined;
   status: ReturnType<typeof statusOf>;
   document: OwnedDocumentDetail;
   invited: OwnedSigner | undefined;
@@ -429,7 +440,12 @@ function StatusCallout({
   if (status === 'in_progress') {
     tone = 'brand';
     icon = <Clock className="size-5" strokeWidth={1.75} />;
-    if (invited?.inviteEmail === 'failed') {
+    if (invited?.isSelf) {
+      tone = 'warning';
+      icon = <PenLine className="size-5" strokeWidth={1.75} />;
+      heading = 'Your turn to sign';
+      body = `${next ? `${next.name} is invited after you sign.` : 'You are the last person to sign.'}`;
+    } else if (invited?.inviteEmail === 'failed') {
       tone = 'warning';
       icon = <TriangleAlert className="size-5" strokeWidth={1.75} />;
       heading = `We couldn’t email ${invited.name}`;
@@ -449,6 +465,10 @@ function StatusCallout({
           : 'and has not opened it yet',
       ].join(' ');
       body = `${when}. ${next ? `${next.name} is invited after they sign.` : 'They are the last person to sign.'}`;
+      if (document.delivery === 'link') {
+        body =
+          `No email was sent. Copy their signing link and share it yourself. ${next ? `${next.name}'s link appears here once they have signed.` : ''}`.trim();
+      }
       note = `Copying a new link turns off the one ${invited.name} already has.`;
     } else {
       heading = 'Out for signature';
@@ -499,6 +519,7 @@ function StatusCallout({
           <h2 className="text-subheading font-semibold">{heading}</h2>
           <p className="mt-0.5 text-sm leading-relaxed break-words">{body}</p>
         </div>
+        {signNow ? <SignNowButton signerId={signNow} size="lg" /> : null}
         {onCopy ? (
           <Button
             type="button"

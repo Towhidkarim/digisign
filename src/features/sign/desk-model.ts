@@ -1,11 +1,12 @@
 import type { FieldInput, FieldValue } from '#/core/contracts/index.ts';
+import { isAutoKind } from '#/core/signer-rules.ts';
 
 /** A required field is done when the signer has given it something the server will accept. */
 export function fieldFilled(
   field: FieldInput,
   values: readonly FieldValue[],
 ): boolean {
-  if (field.kind === 'date_signed' || field.kind === 'full_name') return true;
+  if (isAutoKind(field.kind)) return true;
   const value = values.find((item) => item.fieldId === field.id);
   if (!value) return false;
   if (field.kind === 'signature' || field.kind === 'initials') {
@@ -18,12 +19,7 @@ export function fieldFilled(
 /** Fields the signer has to act on, in reading order (page, then top to bottom, then left). */
 export function requiredFields(fields: readonly FieldInput[]): FieldInput[] {
   return fields
-    .filter(
-      (field) =>
-        field.required &&
-        field.kind !== 'date_signed' &&
-        field.kind !== 'full_name',
-    )
+    .filter((field) => field.required && !isAutoKind(field.kind))
     .sort(
       (left, right) =>
         left.pageIndex - right.pageIndex ||

@@ -20,6 +20,8 @@ import {
 const STORAGE_KEY = 'digisign.prepare.v1';
 
 export type Draft = {
+  /** A template is edited like a draft but is saved to the template list, never sent. */
+  kind: 'document' | 'template';
   fileName: string;
   bytes: Uint8Array | null;
   upload: UploadInit | null;
@@ -28,6 +30,7 @@ export type Draft = {
 };
 
 type StoredDraft = {
+  kind?: 'document' | 'template';
   fileName: string;
   fileBase64: string | null;
   upload: UploadInit;
@@ -69,6 +72,7 @@ export function hydrateDraft(): Draft {
     cachedBase64 =
       typeof parsed.fileBase64 === 'string' ? parsed.fileBase64 : null;
     draft = {
+      kind: parsed.kind === 'template' ? 'template' : 'document',
       fileName:
         typeof parsed.fileName === 'string' ? parsed.fileName : 'Document',
       bytes: cachedBase64 ? base64ToBytes(cachedBase64) : null,
@@ -94,13 +98,14 @@ export async function initUpload(
   file: { name: string; bytes: Uint8Array },
   /** Tells the screen which stage is running. Does not change what runs or in what order. */
   onPhase?: (phase: UploadPhase) => void,
+  kind: Draft['kind'] = 'document',
 ): Promise<UploadInit> {
   onPhase?.('reading');
   const upload = await readUpload(file.bytes);
   onPhase?.('saving');
   const title = (file.name || 'Document').replace(/\.pdf$/i, '') || 'Document';
   const created = await createDraftFn({
-    data: { id: upload.documentId, title },
+    data: { id: upload.documentId, title, kind },
   });
   if ('error' in created) throw new Error(created.error);
   const recorded = await initUploadFn({ data: upload });
@@ -119,6 +124,7 @@ export async function initUpload(
     throw new Error(payload?.error ?? 'The PDF could not be stored.');
   }
   draft = {
+    kind,
     fileName: title,
     bytes: file.bytes,
     upload,
@@ -158,6 +164,7 @@ export async function savePreparation(input: {
         id: signer.id,
         name: signer.name,
         email: signer.email,
+        ...(signer.self ? { self: true } : {}),
       })),
       fields: input.fields.map((field) => ({ ...field })),
     },
@@ -222,11 +229,13 @@ export async function resumeServerDraft(
           id: signer.id,
           name: signer.name,
           email: signer.email ?? '',
+          ...(signer.self ? { self: true } : {}),
           color:
             SIGNER_COLORS[index % SIGNER_COLORS.length] ?? SIGNER_COLORS[0],
         }))
       : [defaultSigner()];
   draft = {
+    kind: loaded.kind === 'template' ? 'template' : 'document',
     fileName: loaded.title,
     bytes,
     upload: loaded.upload,
@@ -241,13 +250,14 @@ export async function resumeServerDraft(
 
 export async function publishDocument(
   documentId: string,
+  delivery: 'email' | 'link' = 'email',
 ): Promise<{ documentId: string; status: 'in_progress' } | { error: string }> {
-  return publishFn({ data: { documentId } });
+  return publishFn({ data: { documentId, delivery } });
 }
 
 export async function reissueInvite(
   signerId: string,
-): Promise<{ ok: true } | { error: string }> {
+): Promise<{ ok: true; url: string } | { error: string }> {
   return reissueInviteFn({ data: { signerId } });
 }
 
@@ -266,6 +276,7 @@ export function saveLayout(layout: SaveLayoutInput): void {
 
 function emptyDraft(): Draft {
   return {
+    kind: 'document',
     fileName: '',
     bytes: null,
     upload: null,
@@ -302,6 +313,7 @@ function persist(): void {
     }
   }
   const stored: StoredDraft = {
+    kind: draft.kind,
     fileName: draft.fileName,
     fileBase64: cachedBase64,
     upload: draft.upload,

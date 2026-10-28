@@ -11,7 +11,12 @@ export const limits = {
   strokeCoordMax: 10_000,
   strokesBase64MaxChars: 48 * 1024,
   typedSignatureChars: 64,
+  /** A stamp or image signature, as base64 of a small PNG (about 30 KB of bytes). */
+  imageBase64MaxChars: 40 * 1024,
+  imageMaxPx: { w: 600, h: 240 },
   textFieldChars: 240,
+  fieldLabelChars: 60,
+  templatesPerOwner: 100,
   requestBodyBytes: 128 * 1024,
   pageExtentMaxPt: 14_400,
   micro: 1_000_000,
@@ -23,7 +28,8 @@ export type FieldKind =
   | 'date_signed'
   | 'full_name'
   | 'text'
-  | 'checkbox';
+  | 'checkbox'
+  | 'prefilled_text';
 
 export function minFieldSizePt(
   kind: FieldKind,

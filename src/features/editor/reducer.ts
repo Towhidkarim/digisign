@@ -6,8 +6,8 @@ import {
   ptToMicro,
   viewSize,
 } from '#/core/coords.ts';
-import { SIGNER_COLORS } from '#/core/signer-colors.ts';
 import { type FieldKind, limits, minFieldSizePt } from '#/core/limits.ts';
+import { SIGNER_COLORS } from '#/core/signer-colors.ts';
 
 export { SIGNER_COLORS };
 
@@ -18,6 +18,7 @@ export const FIELD_LABEL: Record<FieldKind, string> = {
   full_name: 'Full name',
   text: 'Text box',
   checkbox: 'Checkmark',
+  prefilled_text: 'Prefilled text',
 };
 
 const READABLE_MIN_PT: Record<FieldKind, { w: number; h: number }> = {
@@ -27,6 +28,7 @@ const READABLE_MIN_PT: Record<FieldKind, { w: number; h: number }> = {
   full_name: { w: 140, h: 16 },
   text: { w: 72, h: 16 },
   checkbox: { w: 14, h: 14 },
+  prefilled_text: { w: 72, h: 16 },
 };
 
 const DEFAULT_SIZE_PT: Record<FieldKind, { w: number; h: number }> = {
@@ -36,6 +38,7 @@ const DEFAULT_SIZE_PT: Record<FieldKind, { w: number; h: number }> = {
   full_name: { w: 160, h: 20 },
   text: { w: 180, h: 24 },
   checkbox: { w: 18, h: 18 },
+  prefilled_text: { w: 220, h: 22 },
 };
 
 export type EditorSigner = {
@@ -43,6 +46,8 @@ export type EditorSigner = {
   name: string;
   email: string;
   color: string;
+  /** The owner signing their own document. At most one signer. */
+  self?: boolean;
 };
 
 type Snapshot = {
@@ -87,11 +92,20 @@ export type EditorAction =
   | { type: 'nudge'; id: string; dx: number; dy: number }
   | { type: 'delete'; id: string }
   | { type: 'set-required'; id: string; required: boolean }
+  | { type: 'set-field-text'; id: string; label: string; prefill: string }
   | { type: 'select-field'; id: string | null }
   | { type: 'select-signer'; id: string }
   | { type: 'add-signer'; signer: EditorSigner }
   | { type: 'rename-signer'; id: string; name: string }
   | { type: 'set-signer-email'; id: string; email: string }
+  | {
+      type: 'set-signer-self';
+      id: string;
+      self: boolean;
+      /** The owner's own details, filled in when the signer becomes them. */
+      name?: string;
+      email?: string;
+    }
   | { type: 'reorder-signers'; from: number; to: number; record?: boolean }
   | { type: 'remove-signer'; id: string }
   | { type: 'sync-version'; layoutVersion: number }
@@ -163,6 +177,8 @@ export function editorReducer(
       return deleteField(state, action.id);
     case 'set-required':
       return setRequired(state, action.id, action.required);
+    case 'set-field-text':
+      return setFieldText(state, action);
     case 'select-field':
       return { ...state, selectedFieldId: action.id };
     case 'select-signer':
@@ -184,6 +200,23 @@ export function editorReducer(
         signers: state.signers.map((signer) =>
           signer.id === action.id ? { ...signer, email: action.email } : signer,
         ),
+      };
+    case 'set-signer-self':
+      return {
+        ...state,
+        signers: state.signers.map((signer) => {
+          if (signer.id !== action.id) {
+            return action.self && signer.self
+              ? { ...signer, self: undefined }
+              : signer;
+          }
+          return {
+            ...signer,
+            self: action.self ? true : undefined,
+            name: action.self && action.name ? action.name : signer.name,
+            email: action.self ? (action.email ?? signer.email) : signer.email,
+          };
+        }),
       };
     case 'reorder-signers':
       return reorderSigners(
@@ -321,6 +354,32 @@ function setRequired(
     },
     true,
   );
+}
+
+/**
+ * Typing into a prefilled field is not a history step of its own: each keystroke would be one.
+ * The field is overwritten in place and the next layout save carries it.
+ */
+function setFieldText(
+  state: EditorState,
+  action: Extract<EditorAction, { type: 'set-field-text' }>,
+): EditorState {
+  const field = state.fields.find((item) => item.id === action.id);
+  if (!field || field.kind !== 'prefilled_text') return state;
+  const label = action.label.slice(0, limits.fieldLabelChars);
+  const prefill = action.prefill.slice(0, limits.textFieldChars);
+  if ((field.label ?? '') === label && (field.prefill ?? '') === prefill) {
+    return state;
+  }
+  return {
+    ...state,
+    fields: state.fields.map((item) =>
+      item.id === action.id
+        ? { ...item, label: label || undefined, prefill }
+        : item,
+    ),
+    layoutVersion: state.layoutVersion + 1,
+  };
 }
 
 function deleteField(state: EditorState, id: string): EditorState {

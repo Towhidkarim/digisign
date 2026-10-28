@@ -17,6 +17,7 @@ import { Route as SignRouteImport } from './routes/sign'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as DotwellKnownDigisignKeysDotjsonRouteImport } from './routes/[.]well-known/digisign-keys[.]json'
 import { Route as ShellDashboardRouteImport } from './routes/_shell.dashboard'
+import { Route as ShellTemplatesRouteImport } from './routes/_shell.templates'
 import { Route as ShellVerifyRouteImport } from './routes/_shell.verify'
 import { Route as DevFoundationsRouteImport } from './routes/dev/foundations'
 import { Route as STokenRouteImport } from './routes/s/$token'
@@ -64,6 +65,11 @@ const DotwellKnownDigisignKeysDotjsonRoute =
 const ShellDashboardRoute = ShellDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellTemplatesRoute = ShellTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
   getParentRoute: () => ShellRoute,
 } as any)
 const ShellVerifyRoute = ShellVerifyRouteImport.update({
@@ -116,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dashboard': typeof ShellDashboardRoute
+  '/templates': typeof ShellTemplatesRoute
   '/verify': typeof ShellVerifyRoute
   '/dev/foundations': typeof DevFoundationsRoute
   '/s/$token': typeof STokenRoute
@@ -133,6 +140,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/dashboard': typeof ShellDashboardRoute
+  '/templates': typeof ShellTemplatesRoute
   '/verify': typeof ShellVerifyRoute
   '/dev/foundations': typeof DevFoundationsRoute
   '/s/$token': typeof STokenRoute
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/.well-known/digisign-keys.json': typeof DotwellKnownDigisignKeysDotjsonRoute
   '/_shell/dashboard': typeof ShellDashboardRoute
+  '/_shell/templates': typeof ShellTemplatesRoute
   '/_shell/verify': typeof ShellVerifyRoute
   '/dev/foundations': typeof DevFoundationsRoute
   '/s/$token': typeof STokenRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/.well-known/digisign-keys.json'
     | '/dashboard'
+    | '/templates'
     | '/verify'
     | '/dev/foundations'
     | '/s/$token'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/.well-known/digisign-keys.json'
     | '/dashboard'
+    | '/templates'
     | '/verify'
     | '/dev/foundations'
     | '/s/$token'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/.well-known/digisign-keys.json'
     | '/_shell/dashboard'
+    | '/_shell/templates'
     | '/_shell/verify'
     | '/dev/foundations'
     | '/s/$token'
@@ -289,6 +301,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellDashboardRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/templates': {
+      id: '/_shell/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof ShellTemplatesRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/verify': {
       id: '/_shell/verify'
       path: '/verify'
@@ -350,6 +369,7 @@ declare module '@tanstack/react-router' {
 
 interface ShellRouteChildren {
   ShellDashboardRoute: typeof ShellDashboardRoute
+  ShellTemplatesRoute: typeof ShellTemplatesRoute
   ShellVerifyRoute: typeof ShellVerifyRoute
   ShellDocumentsDocumentIdRoute: typeof ShellDocumentsDocumentIdRoute
   ShellDocumentsIndexRoute: typeof ShellDocumentsIndexRoute
@@ -357,6 +377,7 @@ interface ShellRouteChildren {
 
 const ShellRouteChildren: ShellRouteChildren = {
   ShellDashboardRoute: ShellDashboardRoute,
+  ShellTemplatesRoute: ShellTemplatesRoute,
   ShellVerifyRoute: ShellVerifyRoute,
   ShellDocumentsDocumentIdRoute: ShellDocumentsDocumentIdRoute,
   ShellDocumentsIndexRoute: ShellDocumentsIndexRoute,

@@ -16,14 +16,17 @@ export const Route = createFileRoute('/prepare')({
   ssr: false,
   validateSearch: (
     search: Record<string, unknown>,
-  ): { documentId?: string } => {
+  ): { documentId?: string; kind?: 'template' } => {
+    const kind = search.kind === 'template' ? ('template' as const) : undefined;
     if (
       typeof search.documentId !== 'string' ||
       search.documentId.length === 0
     ) {
-      return {};
+      return kind ? { kind } : {};
     }
-    return { documentId: search.documentId };
+    return kind
+      ? { documentId: search.documentId, kind }
+      : { documentId: search.documentId };
   },
   beforeLoad: async () => {
     if (!(await getSessionFn())) throw redirect({ to: '/login' });

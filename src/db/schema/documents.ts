@@ -16,6 +16,10 @@ export const documents = sqliteTable(
     id: text().primaryKey(),
     ownerId: text('owner_id').notNull(),
     title: text().notNull(),
+    /** A template is a reusable draft that is never sent: it is copied into a document. */
+    kind: text().notNull().default('document'),
+    /** How signers are reached: 'email' sends the invite; 'link' sends nothing and the owner shares each link. */
+    delivery: text().notNull().default('email'),
     status: text().notNull().default('draft'),
     uploadStatus: text('upload_status').notNull().default('pending'),
     sourceR2Key: text('source_r2_key'),
@@ -46,6 +50,8 @@ export const documents = sqliteTable(
       'documents_status_ck',
       sql`${table.status} IN ('draft', 'in_progress', 'completed', 'declined', 'voided', 'expired')`,
     ),
+    check('documents_delivery_ck', sql`${table.delivery} IN ('email', 'link')`),
+    check('documents_kind_ck', sql`${table.kind} IN ('document', 'template')`),
     check(
       'documents_upload_status_ck',
       sql`${table.uploadStatus} IN ('pending', 'uploaded', 'rejected')`,

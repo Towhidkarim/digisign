@@ -8,7 +8,12 @@ import {
   DialogFooter,
   DialogTitle,
 } from '#/components/ui/dialog.tsx';
-import { countIssues, isReady, type SignerCheck } from '#/core/signer-rules.ts';
+import {
+  countIssues,
+  type Delivery,
+  isReady,
+  type SignerCheck,
+} from '#/core/signer-rules.ts';
 import type { EditorSigner } from '#/features/editor/reducer.ts';
 import { cn } from '#/lib/utils.ts';
 
@@ -49,6 +54,8 @@ export function ReviewDialog({
   fieldCount,
   signers,
   checks,
+  delivery = 'email',
+  emptyPrefills = 0,
   sending,
   onSend,
 }: {
@@ -59,10 +66,14 @@ export function ReviewDialog({
   fieldCount: number;
   signers: readonly EditorSigner[];
   checks: readonly SignerCheck[];
+  /** 'link': nobody is emailed, so an address is optional and the sender shares each link. */
+  delivery?: Delivery;
+  /** Prefilled text fields still empty. They block sending like a missing email does. */
+  emptyPrefills?: number;
   sending: boolean;
   onSend: () => void;
 }) {
-  const problems = countIssues(checks);
+  const problems = countIssues(checks) + emptyPrefills;
   const blocked = problems > 0;
   const first = signers[0]?.name.trim() || 'The first signer';
   return (
@@ -76,7 +87,11 @@ export function ReviewDialog({
     >
       <DialogContent aria-describedby="review-summary">
         <div>
-          <DialogTitle>Review before sending</DialogTitle>
+          <DialogTitle>
+            {delivery === 'link'
+              ? 'Review before sending'
+              : 'Review before sending'}
+          </DialogTitle>
           <DialogDescription id="review-summary" className="mt-1">
             {fileName || 'Document'} · {plural(pageCount, 'page')} ·{' '}
             {plural(fieldCount, 'field')}
@@ -98,6 +113,13 @@ export function ReviewDialog({
               {problems === 1 ? 'it' : 'them'}.
             </p>
           </div>
+        ) : null}
+        {emptyPrefills > 0 ? (
+          <p className="text-sm text-danger-fg">
+            {emptyPrefills === 1
+              ? 'One prefilled text field is still empty.'
+              : `${emptyPrefills} prefilled text fields are still empty.`}
+          </p>
         ) : null}
         <section aria-labelledby="review-order">
           <h3
@@ -157,7 +179,14 @@ export function ReviewDialog({
                           : 'text-muted-foreground',
                       )}
                     >
-                      {check ? emailLine(check, signer.email) : signer.email}
+                      {signer.self
+                        ? 'You, signing from your dashboard'
+                        : (delivery === 'link' || !signer.email.trim()) &&
+                            !check?.email
+                          ? 'Signs from a link you share'
+                          : check
+                            ? emailLine(check, signer.email)
+                            : signer.email}
                     </p>
                   </div>
                 </li>
@@ -172,8 +201,9 @@ export function ReviewDialog({
             strokeWidth={1.75}
           />
           <p>
-            {first} is invited first. Each person is invited after the one
-            before them signs. Once sent, this document can no longer be edited.
+            {delivery === 'link'
+              ? `No emails are sent. After sending you copy ${first}'s signing link and share it yourself. Each later signer's link is on the document page once the one before them signs. Once sent, this document can no longer be edited.`
+              : `${first} is invited first. Each person is invited after the one before them signs. Once sent, this document can no longer be edited.`}
           </p>
         </div>
         <DialogFooter>
@@ -199,7 +229,11 @@ export function ReviewDialog({
               onSend();
             }}
           >
-            {sending ? 'Sending…' : 'Send for signature'}
+            {sending
+              ? 'Sending…'
+              : delivery === 'link'
+                ? 'Send and get link'
+                : 'Send for signature'}
           </Button>
         </DialogFooter>
       </DialogContent>
