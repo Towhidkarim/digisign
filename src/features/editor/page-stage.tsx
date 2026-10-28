@@ -83,6 +83,8 @@ export function PageStage({
   const sizes = useRef(new Map<number, { width: number; height: number }>());
   const [frame, setFrame] = useState({ width: 720, height: 900 });
   const [near, setNear] = useState<ReadonlySet<number>>(() => new Set([0]));
+  const [loadedFile, setLoadedFile] = useState<Blob | null>(null);
+  const loaded = loadedFile === file;
   const dpr = cappedDevicePixelRatio();
 
   useEffect(() => {
@@ -100,9 +102,11 @@ export function PageStage({
     return () => observer.disconnect();
   }, []);
 
+  // Page nodes only exist once react-pdf has loaded the file, so observe after
+  // that. Observing on mount finds no nodes and leaves every page but the first blank.
   useEffect(() => {
     const root = rootRef.current;
-    if (!root) return;
+    if (!root || !loaded) return;
     const visible = new Set<number>();
     const observer = new IntersectionObserver(
       (entries) => {
@@ -122,7 +126,7 @@ export function PageStage({
     );
     for (const node of nodes.current.values()) observer.observe(node);
     return () => observer.disconnect();
-  }, [onPageChange]);
+  }, [onPageChange, loaded]);
 
   useEffect(() => {
     if (!jumpTo) return;
@@ -209,6 +213,7 @@ export function PageStage({
             This file could not be read as a PDF. Choose another file.
           </p>
         }
+        onLoadSuccess={() => setLoadedFile(file)}
         onLoadError={() =>
           onViewError(
             'This file could not be read as a PDF. Choose another file.',
